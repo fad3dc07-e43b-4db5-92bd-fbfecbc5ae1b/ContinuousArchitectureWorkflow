@@ -1,4 +1,4 @@
 validators:
-  - id: archi-archimate-source
-    title: Fuente Archi ArchiMate
-    ruleFile: archi-archimate-source.yaml
+  - id: archi-xml-serialization-rule
+    title: Regla de serialización XML Archi
+    ruleFile: archi-xml-serialization-rule.yaml

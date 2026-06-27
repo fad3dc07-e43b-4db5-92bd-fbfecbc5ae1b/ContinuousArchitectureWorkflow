@@ -1,5 +1,5 @@
-id: archi-archimate-source
-title: Fuente Archi ArchiMate
+id: archi-xml-serialization-rule
+title: Regla de serialización XML Archi
 description: Valida una fuente editada con Archi y compatible con ArchiMate.
 checks:
   - id: source-folder
