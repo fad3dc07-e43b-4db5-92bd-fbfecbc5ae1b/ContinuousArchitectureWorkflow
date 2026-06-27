@@ -4,7 +4,7 @@ Estos scripts viven en el repo central `ci-architecture-governance` y son usados
 
 ## `common.mjs`
 
-Contiene helpers compartidos para leer argumentos, escribir reportes JSON y persistir texto o JSON de forma consistente.
+Contiene componentes compartidos para leer argumentos, crear estado de validación, agregar checks, construir reportes y persistir texto o JSON de forma consistente.
 
 ## `validate-repository-structure.mjs`
 

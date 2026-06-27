@@ -1,6 +1,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { getArg, resolveArgPath, writeJsonReport } from './common.mjs';
+import {
+  addValidationCheck,
+  createValidationReport,
+  createValidationState,
+  failValidation,
+  getArg,
+  resolveArgPath,
+  writeJsonReport,
+} from './common.mjs';
 
 // Valida la estructura base esperada para un activo arquitectónico gobernado.
 // Comprueba el nombre del repositorio y el layout mínimo de carpetas/archivos,
@@ -19,13 +27,12 @@ const requiredPaths = [
   ['artifact/exchange/design.openexchange.xml', 'file'],
 ];
 
-const observations = [];
-const checks = [];
+const state = createValidationState();
 const repoOk = new RegExp(repositoryNamePattern).test(repoName);
 
 // Conserva un rastro legible para el reporte final.
 if (!repoOk) {
-  observations.push(`Repository name '${repoName}' does not match '${repositoryNamePattern}'.`);
+  failValidation(state, `Repository name '${repoName}' does not match '${repositoryNamePattern}'.`);
 }
 
 // Valida cada ruta requerida como archivo o carpeta según corresponda.
@@ -34,20 +41,15 @@ for (const [relativePath, expectedKind] of requiredPaths) {
   const exists = fs.existsSync(absolutePath);
   const kindOk = exists && (expectedKind === 'file' ? fs.statSync(absolutePath).isFile() : fs.statSync(absolutePath).isDirectory());
   if (!kindOk) {
-    observations.push(`Expected ${expectedKind} '${relativePath}' is missing or invalid.`);
+    failValidation(state, `Expected ${expectedKind} '${relativePath}' is missing or invalid.`);
   }
-  checks.push({ path: relativePath, kind: expectedKind, status: kindOk ? 'PASS' : 'FAIL' });
+  addValidationCheck(state, relativePath, kindOk ? 'PASS' : 'FAIL', expectedKind);
 }
 
 // Consolida las verificaciones en un estado único para CI.
-const status = repoOk && checks.every((item) => item.status === 'PASS') ? 'PASS' : 'FAIL';
-const report = {
-  name: repoName,
-  status,
-  checks: [{ name: 'repository_name', status: repoOk ? 'PASS' : 'FAIL' }, ...checks],
-  observations,
-};
+addValidationCheck(state, 'repository_name', repoOk ? 'PASS' : 'FAIL');
+const report = createValidationReport({ name: repoName }, state);
 
 // Persiste el reporte JSON para que el workflow lo exponga como salida.
 writeJsonReport(reportFile, report);
-process.stdout.write(`${status}\n`);
+process.stdout.write(`${report.status}\n`);
