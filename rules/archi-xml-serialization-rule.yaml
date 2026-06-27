@@ -1,31 +1,57 @@
+# Regla declarativa para validar la serialización XML de un modelo editado con Archi.
+# Alcance:
+# - Verifica que `artifact/source` contenga una sola fuente visible.
+# - Exige que la fuente se llame `design.archimate`.
+# - Comprueba que el archivo tenga forma de export Archi/ArchiMate válida.
+# - No valida contenido semántico del modelo ni reglas de arquitectura del negocio.
+# Propiedades de cada check:
+# - `id`: identificador estable del check para trazabilidad y reportes.
+# - `type`: tipo de verificación que ejecuta el engine declarativo.
+# - `path`: ruta relativa dentro del repo objetivo.
+# - `kind`: tipo esperado de la ruta (`file` o `dir`) cuando aplique.
+# - `name`: nombre esperado de un archivo visible dentro de una carpeta.
+# - `root`: etiqueta raíz XML esperada.
+# - `text`: cadena obligatoria que debe aparecer en el archivo.
+# - `message`: mensaje mostrado al usuario si la regla falla.
 id: archi-xml-serialization-rule
 title: Regla de serialización XML Archi
 description: Valida una fuente editada con Archi y compatible con ArchiMate.
 checks:
+  # La carpeta `artifact/source` debe existir porque contiene la fuente editable del diseño.
   - id: source-folder
     type: path
     path: artifact/source
     kind: dir
     message: La carpeta artifact/source debe existir.
+
+  # Solo se admite una fuente visible en `artifact/source`: el archivo del modelo de trabajo.
   - id: single-design-file
     type: single-visible-file
     path: artifact/source
     name: design.archimate
     message: artifact/source debe contener solo design.archimate.
+
+  # El archivo fuente no puede estar vacío porque debe contener un modelo XML utilizable.
   - id: non-empty-file
     type: file-not-empty
     path: artifact/source/design.archimate
     message: design.archimate no puede estar vacío.
+
+  # La raíz debe ser `archimate:model`, que es la firma estructural del export de Archi.
   - id: archimate-root
     type: xml-root
     path: artifact/source/design.archimate
     root: archimate:model
     message: design.archimate debe iniciar con la raíz archimate:model.
+
+  # El namespace de Archi debe estar presente para conservar compatibilidad con el editor.
   - id: archimate-namespace
     type: text-contains
     path: artifact/source/design.archimate
     text: xmlns:archimate="http://www.archimatetool.com/archimate"
     message: design.archimate debe incluir el namespace de Archi.
+
+  # El namespace `xsi` es parte del patrón esperado en exportaciones de Archi.
   - id: xsi-namespace
     type: text-contains
     path: artifact/source/design.archimate
