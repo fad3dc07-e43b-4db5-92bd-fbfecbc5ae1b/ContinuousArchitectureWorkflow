@@ -47,7 +47,7 @@ jobs:
         env:
           MANIFEST_FILE: ${{ inputs.manifest_file }}
         run: |
-          response="$(node governance/engine.mjs --mode validate --repo-root "$GITHUB_WORKSPACE" --manifest "governance/$MANIFEST_FILE")"
+          response="$(node governance/src/engine.mjs --mode validate --repo-root "$GITHUB_WORKSPACE" --manifest "governance/$MANIFEST_FILE")"
           status="$(node -e "const response = JSON.parse(process.argv[1]); process.stdout.write(response.status || 'FAIL');" "$response")"
           printf 'status=%s\n' "$status" >> "$GITHUB_OUTPUT"
           printf 'response<<EOF\n%s\nEOF\n' "$response" >> "$GITHUB_OUTPUT"
@@ -74,7 +74,7 @@ jobs:
       - name: Mostrar informe consolidado
         shell: bash
         run: |
-          status="$(VALIDATION_RESPONSE="$VALIDATION_RESPONSE" node governance/engine.mjs --mode summary)"
+          status="$(VALIDATION_RESPONSE="$VALIDATION_RESPONSE" node governance/src/engine.mjs --mode summary)"
           if [ "$status" != "PASS" ]; then exit 1; fi
         env:
           VALIDATION_RESPONSE: ${{ needs.execute_rules.outputs.response }}
