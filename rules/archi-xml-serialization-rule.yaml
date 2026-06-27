@@ -1,4 +1,6 @@
 # Regla declarativa para validar la serialización XML de un modelo editado con Archi.
+# Título: Regla de serialización XML Archi
+# Autor: Equipo de Gobernanza de Arquitectura
 # Alcance:
 # - Verifica que `artifact/source` contenga una sola fuente visible.
 # - Exige que la fuente se llame `design.archimate`.
@@ -15,6 +17,7 @@
 # - `message`: mensaje mostrado al usuario si la regla falla.
 id: archi-xml-serialization-rule
 title: Regla de serialización XML Archi
+author: Equipo de Gobernanza de Arquitectura
 description: Valida una fuente editada con Archi y compatible con ArchiMate.
 checks:
   # La carpeta `artifact/source` debe existir porque contiene la fuente editable del diseño.
