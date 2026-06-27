@@ -2,10 +2,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getArg, resolveArgPath } from './infra/args.mjs';
-import { isDirectory, isFile, listVisibleEntries, readText } from './infra/fs.mjs';
 import { loadYamlFile } from './infra/yaml.mjs';
 import { validateManifestData, validateRuleSetData } from './core/schemas.mjs';
-import { CHECK_HANDLERS } from './core/registry.mjs';
+import { getCheckRule } from './checks/index.mjs';
 
 export const Engine = {
   version: '1.0.0',
@@ -55,9 +54,10 @@ export const Engine = {
     }
 
     for (const check of ruleSet.checks ?? []) {
-      const handler = CHECK_HANDLERS[check.type];
-      const result = handler ? handler({ repoRoot, repoName, absolutePath: path.resolve(repoRoot, check.path), check }) : { status: 'FAIL', detail: check.type, error: `Regla desconocida: '${check.type}'.` };
-      state.checks.push({ id: check.id || check.type, description: check.description, status: result.status, detail: result.detail, failureMessage: result.error ?? check.failureMessage });
+      const rule = getCheckRule(check.type);
+      const context = { repoRoot, repoName, absolutePath: path.resolve(repoRoot, check.path), check };
+      const result = rule ? rule.evaluate(context) : { status: 'FAIL', detail: check.type, error: `Regla desconocida: '${check.type}'.` };
+      state.checks.push({ id: check.id || check.type, description: check.description, status: result.status, detail: result.detail, failureMessage: result.error ?? check.failureMessage, target: rule?.target });
 
       if (result.status === 'FAIL') {
         state.status = 'FAIL';
