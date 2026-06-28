@@ -33,7 +33,7 @@ jobs:
       - name: Checkout de gobernanza
         uses: actions/checkout@v4
         with:
-          repository: ContinuousArchitecture/ContinuousArchitectureWorkflow
+          repository: ContinuousArchitecture/CALinter
           path: governance
 
       - name: Instalar dependencias del linter
@@ -63,7 +63,7 @@ jobs:
       - name: Checkout de gobernanza
         uses: actions/checkout@v4
         with:
-          repository: ContinuousArchitecture/ContinuousArchitectureWorkflow
+          repository: ContinuousArchitecture/CALinter
           path: governance
 
       - name: Instalar dependencias del linter
