@@ -4,68 +4,48 @@
 
 CALinter is a reusable governance linter for ArchiMate design repositories.
 
-It helps teams enforce modeling conventions and structural compliance early in the delivery flow. The linter is designed to be consumed through GitHub Actions and kept close to the design repository it validates.
+It validates artifacts through a manifest plus ordered DSLs under `specs/`.
 
-## Why CALinter
+## DSL Authoring
 
-- Detects modeling issues before they reach reviewers or downstream consumers.
-- Keeps governance rules centralized and reusable.
-- Supports a clear contract between the governance repo and design repos.
-- Produces machine-readable validation output and a human-readable summary.
+DSLs live in `specs/` and are listed in `specs/manifest.yaml`.
 
-## Supported Model Formats
+The manifest declares the artifact and the execution order. Each DSL is dispatched by its root key, not by filename alone.
 
-CALinter currently supports ArchiMate models exported from Archi in XML form:
-
-- `artifact/source/design.archimate`
-- `artifact/exchange/design.openexchange.xml`
-
-## Adoption
-
-To adopt this approach, fork both repositories into your organization:
-
-1. CALinter: `https://github.com/ContinuousArchitecture/CALinter/fork`
-2. Example solution building block: `https://github.com/ContinuousArchitecture/sbb-9999-example/fork`
-
-Use the forked `sbb-9999-example` repository as the starting point for your design repository.
-
-## Rule Authoring
-
-Rules are defined as YAML files under `rules/` and are listed in `rules/manifest.yaml`.
-
-Each rule set describes:
-
-- `schemaVersion`: rule contract version.
-- `tool`: the modeling tool.
-- `format`: input format.
-- `dialect`: modeling dialect.
-- `target`: the expected file or location.
-- `checks`: the validations to execute.
-
-Typical check types include:
-
-- `path`
-- `single-visible-file`
-- `file-not-empty`
-- `xml-root`
-- `text-contains`
-- `xml-name-regex`
-- `xml-name-not-contains`
-
-## Rule Example
+Example:
 
 ```yaml
 schemaVersion: 1
-title: Example rule
-tool: archi
-format: xml
-dialect: archimate
-target:
-  path: artifact/source/design.archimate
-  mode: single-file
-checks:
-  - id: archimate-root
-    type: xml-root
-    path: artifact/source/design.archimate
-    root: archimate:model
+artifact:
+  type: archimate
+  tool: archi
+  source:
+    path: artifact/source/*.archimate
+    mode: single-file
+orderOfExecution:
+  - archi-consistency-dsl.yaml
+  - archi_style_dsl.yaml
 ```
+
+## DSL Shape
+
+Each DSL declares:
+
+- `archi_consistency_dsl` or `archi_style_dsl`
+- `metadata`
+- `consistencyGuide` or `styleGuide`
+- `rules`
+
+The engine resolves `target: current` from the manifest artifact and executes the rules in order.
+
+## Workflow
+
+The reusable GitHub Action lives in `.github/workflows/compliance.yml` and defaults to `specs/manifest.yaml`.
+
+## Output Semantics
+
+- `PASS`: no blocking issues.
+- `WARN`: non-blocking findings were detected, but the run can continue.
+- `FAIL`: blocking issues were detected and the workflow should stop.
+
+The JSON response uses the same top-level `status` value.

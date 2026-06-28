@@ -1,0 +1,51 @@
+archi_style_dsl: "0.0.1"
+
+metadata:
+  title: Guía de estilo ArchiMate para Archi
+  author: Miguel Céspedes
+  description: Define reglas de nomenclatura, organización de vistas e integridad mínima del modelo ArchiMate.
+
+styleGuide:
+  Strategy: []
+
+  Business: []
+
+  Application: []
+
+  Motivation: []
+
+  TechnologyAndPhysical: []
+
+  ImplementationAndMigration: []
+
+  Other: []
+
+  Relations: []
+
+  Views:
+    - carpetas_obligatorias_regla
+    - nomenclatura_regla
+
+rules:
+  carpetas_obligatorias_regla:
+    severity: error
+    description: Valida que la sección Views contenga las carpetas obligatorias.
+    failureMessage: La sección Views debe contener las carpetas AS-IS y TO-BE.
+
+    validate:
+      xpath: './folder'
+      field: name
+      containsAll:
+        - AS-IS
+        - TO-BE
+
+  nomenclatura_regla:
+    severity: warning
+    description: Valida que los nombres sean claros, legibles y comiencen con mayúscula.
+    failureMessage: El nombre debe ser claro, legible y comenzar con mayúscula.
+
+    validate:
+      xpath: './/*[@name]'
+      field: name
+      regex: '^[A-ZÁÉÍÓÚÑ][A-Za-zÁÉÍÓÚÑáéíóúñ0-9& ()\-\/]+$'
+      example: "SBB-SD-9999 Employee Data Management"

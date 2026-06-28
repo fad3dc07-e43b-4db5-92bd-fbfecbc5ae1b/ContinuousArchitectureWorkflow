@@ -1,0 +1,12 @@
+schemaVersion: 1
+
+artifact:
+  type: archimate
+  tool: archi
+  source:
+    path: artifact/source/*.archimate
+    mode: single-file
+
+orderOfExecution:
+  - archi-consistency-dsl.yaml
+  - archi_style_dsl.yaml

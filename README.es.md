@@ -4,68 +4,48 @@
 
 CALinter es un linter de gobernanza reutilizable para repositorios de diseño ArchiMate.
 
-Ayuda a los equipos a aplicar convenciones de modelado y cumplimiento estructural desde etapas tempranas del flujo de entrega. El linter está diseñado para consumirse desde GitHub Actions y mantenerse cerca del repositorio de diseño que valida.
+Valida artefactos mediante un manifest y DSLs ordenados dentro de `specs/`.
 
-## Por Qué CALinter
+## Autoría de DSL
 
-- Detecta problemas de modelado antes de que lleguen a revisión o a consumidores posteriores.
-- Mantiene las reglas de gobernanza centralizadas y reutilizables.
-- Ofrece un contrato claro entre el repositorio de gobernanza y los repositorios de diseño.
-- Produce una salida de validación legible por máquina y un resumen legible por personas.
+Los DSL viven en `specs/` y se listan en `specs/manifest.yaml`.
 
-## Formatos Compatibles
+El manifest declara el artefacto y el orden de ejecución. Cada DSL se despacha por su clave raíz, no solo por el nombre del archivo.
 
-CALinter soporta actualmente modelos ArchiMate exportados desde Archi en formato XML:
-
-- `artifact/source/design.archimate`
-- `artifact/exchange/design.openexchange.xml`
-
-## Adopción
-
-Para adoptar este enfoque, haz fork de ambos repositorios dentro de tu organización:
-
-1. CALinter: `https://github.com/ContinuousArchitecture/CALinter/fork`
-2. Repositorio de ejemplo: `https://github.com/ContinuousArchitecture/sbb-9999-example/fork`
-
-Usa el fork de `sbb-9999-example` como punto de partida para tu repositorio de diseño.
-
-## Autoría de Reglas
-
-Las reglas se definen como archivos YAML bajo `rules/` y se listan en `rules/manifest.yaml`.
-
-Cada conjunto de reglas describe:
-
-- `schemaVersion`: versión del contrato de la regla.
-- `tool`: herramienta de modelado.
-- `format`: formato de entrada.
-- `dialect`: dialecto de modelado.
-- `target`: archivo o ubicación esperada.
-- `checks`: validaciones a ejecutar.
-
-Los tipos de check habituales incluyen:
-
-- `path`
-- `single-visible-file`
-- `file-not-empty`
-- `xml-root`
-- `text-contains`
-- `xml-name-regex`
-- `xml-name-not-contains`
-
-## Ejemplo de Regla
+Ejemplo:
 
 ```yaml
 schemaVersion: 1
-title: Example rule
-tool: archi
-format: xml
-dialect: archimate
-target:
-  path: artifact/source/design.archimate
-  mode: single-file
-checks:
-  - id: archimate-root
-    type: xml-root
-    path: artifact/source/design.archimate
-    root: archimate:model
+artifact:
+  type: archimate
+  tool: archi
+  source:
+    path: artifact/source/*.archimate
+    mode: single-file
+orderOfExecution:
+  - archi-consistency-dsl.yaml
+  - archi_style_dsl.yaml
 ```
+
+## Forma del DSL
+
+Cada DSL declara:
+
+- `archi_consistency_dsl` o `archi_style_dsl`
+- `metadata`
+- `consistencyGuide` o `styleGuide`
+- `rules`
+
+El engine resuelve `target: current` desde el artefacto del manifest y ejecuta las reglas en orden.
+
+## Workflow
+
+El GitHub Action reutilizable vive en `.github/workflows/compliance.yml` y usa `specs/manifest.yaml` por defecto.
+
+## Semántica De Salida
+
+- `PASS`: no hay problemas bloqueantes.
+- `WARN`: hay hallazgos no bloqueantes, pero la ejecución puede continuar.
+- `FAIL`: hay problemas bloqueantes y el workflow debe detenerse.
+
+La respuesta JSON usa el mismo valor en `status`.

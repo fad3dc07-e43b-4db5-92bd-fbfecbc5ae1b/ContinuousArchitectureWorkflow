@@ -1,0 +1,32 @@
+<archimate:model xmlns:archimate="http://www.archimatetool.com/archimate" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="model-1" name="CALinter Example Model">
+  <folder id="f-strategy" name="Strategy" type="strategy">
+    <element id="e-strategy-1" xsi:type="archimate:BusinessActor" name="Customer" />
+  </folder>
+  <folder id="f-business" name="Business" type="business">
+    <element id="e-business-1" xsi:type="archimate:BusinessActor" name="Sales Team" />
+  </folder>
+  <folder id="f-application" name="Application" type="application">
+    <element id="e-application-1" xsi:type="archimate:ApplicationComponent" name="CRM System" />
+  </folder>
+  <folder id="f-motivation" name="Motivation" type="motivation">
+    <element id="e-motivation-1" xsi:type="archimate:Capability" name="Customer Engagement" />
+  </folder>
+  <folder id="f-technology" name="Technology & Physical" type="technology">
+    <element id="e-technology-1" xsi:type="archimate:ApplicationComponent" name="Billing Platform" />
+  </folder>
+  <folder id="f-implementation" name="Implementation & Migration" type="implementation_migration">
+    <element id="e-implementation-1" xsi:type="archimate:Capability" name="Order Management" />
+  </folder>
+  <folder id="f-other" name="Other" type="other">
+    <element id="e-other-1" xsi:type="archimate:BusinessActor" name="Partner Network" />
+  </folder>
+  <folder id="f-relations" name="Relations" type="relations" />
+  <folder id="f-views" name="Views" type="views">
+    <folder id="f-view-asis" name="AS-IS">
+      <element id="e-view-asis" xsi:type="archimate:ArchimateDiagramModel" name="AS-IS Diagram" />
+    </folder>
+    <folder id="f-view-tobe" name="TO-BE">
+      <element id="e-view-tobe" xsi:type="archimate:ArchimateDiagramModel" name="TO-BE Diagram" />
+    </folder>
+  </folder>
+</archimate:model>

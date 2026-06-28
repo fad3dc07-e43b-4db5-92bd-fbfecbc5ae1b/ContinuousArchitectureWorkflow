@@ -1,0 +1,162 @@
+archi_consistency_dsl: "0.0.1"
+
+metadata:
+  title: Consistencia XML ArchiMate para Archi
+  author: Miguel Céspedes
+  description: Verifica que el artefacto sea un archivo XML válido y que corresponda a un modelo ArchiMate exportado desde Archi.
+  purpose: Confirmar que el archivo no sea un XML genérico, sino un documento Archi reconocible por su raíz, namespaces, estructura de carpetas, elementos, relaciones, vistas e identificadores internos.
+  scope: No valida nomenclatura, organización de vistas, criterios de diseño ni reglas semánticas de arquitectura.
+
+consistencyGuide:
+  document:
+    - documento_texto_plano_regla
+    - xml_bien_formado_regla
+
+  archiIdentity:
+    - raiz_archimate_model_regla
+    - namespace_archimate_regla
+    - namespace_xsi_regla
+    - atributos_modelo_regla
+
+  archiStructure:
+    - carpetas_raiz_archi_regla
+    - elementos_archimate_regla
+    - vistas_archi_regla
+    - relaciones_archi_regla
+
+  internalIntegrity:
+    - identificadores_unicos_regla
+    - referencias_relaciones_regla
+
+rules:
+  documento_texto_plano_regla:
+    severity: error
+    description: Verifica que el artefacto pueda leerse como texto plano y no como binario.
+    failureMessage: El archivo debe ser un documento de texto plano legible.
+    validate:
+      target: current
+      textPlain: true
+      encoding:
+        - utf-8
+        - utf-8-bom
+      rejectBinary: true
+
+  xml_bien_formado_regla:
+    severity: error
+    description: Verifica que el documento pueda parsearse como XML válido.
+    failureMessage: El archivo no es un XML válido o está corrupto.
+    validate:
+      target: current
+      xmlWellFormed: true
+
+  raiz_archimate_model_regla:
+    severity: error
+    description: Verifica que la raíz XML corresponda a un modelo ArchiMate de Archi.
+    failureMessage: La raíz XML debe ser archimate:model.
+    validate:
+      target: current
+      xmlRoot: archimate:model
+
+  namespace_archimate_regla:
+    severity: error
+    description: Verifica que el namespace principal de ArchiMate esté declarado.
+    failureMessage: El XML debe declarar el namespace de ArchiMate usado por Archi.
+    validate:
+      target: current
+      namespace:
+        prefix: archimate
+        uri: http://www.archimatetool.com/archimate
+
+  namespace_xsi_regla:
+    severity: error
+    description: Verifica que el namespace XSI esté declarado para identificar tipos ArchiMate.
+    failureMessage: El XML debe declarar el namespace xsi.
+    validate:
+      target: current
+      namespace:
+        prefix: xsi
+        uri: http://www.w3.org/2001/XMLSchema-instance
+
+  atributos_modelo_regla:
+    severity: error
+    description: Verifica que la raíz del modelo tenga atributos mínimos de identidad.
+    failureMessage: El modelo ArchiMate debe tener al menos id y name en la raíz.
+    validate:
+      xpath: /archimate:model
+      requiredAttributes:
+        - id
+        - name
+
+  carpetas_raiz_archi_regla:
+    severity: error
+    description: Verifica que el modelo contenga las carpetas raíz esperadas en un archivo Archi.
+    failureMessage: El modelo debe contener las carpetas raíz principales de Archi.
+    validate:
+      xpath: /archimate:model/folder
+      field: name
+      containsAll:
+        - Strategy
+        - Business
+        - Application
+        - Motivation
+        - Technology & Physical
+        - Implementation & Migration
+        - Other
+        - Relations
+        - Views
+
+  elementos_archimate_regla:
+    severity: error
+    description: Verifica que existan elementos ArchiMate tipados con xsi:type.
+    failureMessage: El modelo debe contener elementos ArchiMate con tipos declarados mediante xsi:type.
+    validate:
+      xpath: /archimate:model/folder[not(@name="Relations") and not(@name="Views")]//element
+      requiredAttribute: xsi:type
+      attributeValueStartsWith:
+        attribute: xsi:type
+        value: 'archimate:'
+
+  vistas_archi_regla:
+    severity: error
+    description: Verifica que la carpeta Views contenga vistas de Archi.
+    failureMessage: La carpeta Views debe contener al menos una vista ArchiMate.
+    validate:
+      xpath: /archimate:model/folder[@name="Views"]//element
+      requiredAny:
+        - attribute: xsi:type
+          equals: 'archimate:ArchimateDiagramModel'
+
+  relaciones_archi_regla:
+    severity: warning
+    description: Verifica que la carpeta Relations exista y contenga relaciones ArchiMate cuando el modelo tenga relaciones declaradas.
+    failureMessage: Las relaciones deben estar declaradas como elementos ArchiMate dentro de la carpeta Relations.
+    validate:
+      xpath: /archimate:model/folder[@name="Relations"]//element
+      optional: true
+      requiredAttribute: xsi:type
+      attributeValueEndsWith:
+        attribute: xsi:type
+        value: Relationship
+
+  identificadores_unicos_regla:
+    severity: error
+    description: Verifica que los identificadores internos del modelo no estén duplicados.
+    failureMessage: El modelo contiene identificadores duplicados.
+    validate:
+      xpath: //*[@id]
+      uniqueField: id
+
+  referencias_relaciones_regla:
+    severity: error
+    description: Verifica que las relaciones apunten a elementos existentes mediante source y target.
+    failureMessage: Existen relaciones con source o target inexistente dentro del modelo.
+    validate:
+      xpath: /archimate:model/folder[@name="Relations"]//element[@source or @target]
+      optional: true
+      referencesExist:
+        source:
+          field: source
+          in: //*[@id]
+        target:
+          field: target
+          in: //*[@id]
