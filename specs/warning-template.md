@@ -1,6 +1,8 @@
 > [!WARNING]
-> **Regla no cumplida:** {{ruleId}}
-> **Ubicación:** {{location}}
-> **Elemento:** {{element}}
-> **Problema:** {{problem}}
-> **Recomendación:** {{recommendation}}
+> **WARN — {{countLabel}}**
+>
+> - `{{ruleId}}`
+>   **Ubicación:** `{{location}}`
+>   **Elemento:** `{{element}}`
+>   **Observación:** {{problem}}
+>   **Recomendación:** {{recommendation}}

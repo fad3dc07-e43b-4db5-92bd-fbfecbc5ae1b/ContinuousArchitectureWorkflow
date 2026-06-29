@@ -105,20 +105,22 @@ export const Engine = {
     const summaryTemplatePath = resolveTemplatePath(response.manifest, response.summaryTemplatePath ?? this.defaultSummaryTemplatePath);
     const warningTemplatePath = resolveTemplatePath(response.manifest, response.warningTemplatePath ?? this.defaultWarningTemplatePath);
     const rendered = renderTemplate(loadTemplateFile(summaryTemplatePath), {
-      title: 'Architecture Compliance Report',
       score: globalScore === null ? 'No evaluable' : formatScore(globalScore),
       result: decisionFromLintStatus(status),
+      status,
       mergeAllowed: isMergeAllowed(status) ? 'Sí' : 'No',
       blockingErrors: String(stats.failures),
       warnings: String(stats.warnings),
+      rulesEvaluated: String(allChecks.length),
       evaluatedFile: escapeTableCell(artifactPath),
-      warning_block: renderWarningBlock(warningTemplatePath, status, actionable, response.error),
-      warning_heading: 'Reglas no cumplidas',
-      failed_rules_section: renderFailedRulesSection(response.systemStatus, actionable),
-      passed_heading: 'Reglas cumplidas',
-      passed_rules_section: renderPassedRulesSection(validators),
-      execution_heading: 'Información de ejecución',
-      execution_section: renderExecutionSection(response, artifactPath, validators.length, allChecks.length),
+      rules_section: renderRulesSection({
+        status,
+        actionable,
+        validators,
+        warningTemplatePath,
+        response,
+      }),
+      technical_section: renderTechnicalSection(response, artifactPath, validators.length, allChecks.length),
     });
 
     return `${rendered.trimEnd()}\n`;
@@ -163,53 +165,82 @@ function renderWarningBlock(templatePath, status, actionable, error) {
   return '';
 }
 
-function renderFailedRulesSection(systemStatus, actionable) {
+function renderRulesSection({ status, actionable, validators, warningTemplatePath, response }) {
+  const sections = [];
+
+  const passedChecks = validators.flatMap((validator) => (validator.checks ?? []).map((check) => ({ validator, check }))).filter(({ check }) => check.status === 'PASS');
+  sections.push(renderPassBlock(passedChecks));
+
+  if (status === 'WARN' && actionable.length > 0) {
+    const warning = actionable.find(({ check }) => check.status === 'WARN') ?? actionable[0];
+    sections.push(renderTemplate(loadTemplateFile(warningTemplatePath), {
+      countLabel: `${actionable.filter(({ check }) => check.status === 'WARN').length} regla con observación`,
+      ruleId: warning?.check?.id ?? 'N/A',
+      location: warning?.check?.group ?? 'General',
+      element: warning?.check?.detail ?? warning?.check?.message ?? 'N/A',
+      problem: lowercaseFirst(warning?.check?.message ?? warning?.check?.detail ?? 'Revisar el hallazgo reportado.'),
+      recommendation: suggestAction(warning?.check ?? {}),
+    }));
+  }
+
+  sections.push(renderFailBlock(response.systemStatus, actionable));
+  return sections.filter(Boolean).join('\n\n');
+}
+
+function renderPassBlock(passedChecks) {
+  const count = passedChecks.length;
+  const lines = [
+    `> [!TIP]`,
+    `> **PASS — ${count} reglas cumplidas**`,
+    '>',
+  ];
+
+  if (count === 0) {
+    lines.push('> No hay reglas cumplidas para mostrar.');
+    return lines.join('\n');
+  }
+
+  for (const { check } of passedChecks) {
+    const evidence = stripTrailingPeriod(check.description ?? check.detail ?? 'OK');
+    lines.push(`> - \`${escapeTableCell(check.id)}\` — ${escapeTableCell(evidence)}.`);
+  }
+
+  return lines.join('\n');
+}
+
+function renderFailBlock(systemStatus, actionable) {
+  const failCount = actionable.filter(({ check }) => check.status === 'FAIL').length;
   if (systemStatus === 'ERROR') {
-    return 'No se pudo evaluar el diseño: error técnico.';
+    return [
+      '> [!CAUTION]',
+      '> **FAIL — No evaluable**',
+      '>',
+      '> No se pudo evaluar el diseño por un error técnico.',
+    ].join('\n');
   }
 
-  if (actionable.length === 0) {
-    return 'No hay reglas no cumplidas.';
+  if (failCount === 0) {
+    return [
+      '> [!CAUTION]',
+      '> **FAIL — 0 reglas no cumplidas**',
+      '>',
+      '> No existen reglas bloqueantes incumplidas.',
+    ].join('\n');
   }
 
-  const lines = ['| Estado | Regla | Ubicación | Recomendación |', '|---|---|---|---|'];
-  for (const { check } of actionable) {
-    const location = check.group ?? 'General';
-    const suggestion = escapeTableCell(suggestAction(check));
-    lines.push(`| ${statusVisual(check.status)} | ${escapeTableCell(check.id)} | ${escapeTableCell(location)} | ${suggestion} |`);
+  const lines = [
+    '> [!CAUTION]',
+    `> **FAIL — ${failCount} reglas no cumplidas**`,
+    '>',
+    '> Revisa las siguientes reglas bloqueantes:',
+  ];
+  for (const { check } of actionable.filter(({ check }) => check.status === 'FAIL')) {
+    lines.push(`> - \`${escapeTableCell(check.id)}\` — ${escapeTableCell(check.message ?? check.detail ?? 'Revisar.')}`);
   }
   return lines.join('\n');
 }
 
-function renderPassedRulesSection(validators) {
-  const blocks = [];
-  for (const validator of validators) {
-    const counts = countChecks(validator.checks ?? []);
-    const passed = (validator.checks ?? []).filter((check) => check.status === 'PASS');
-    if (passed.length === 0) {
-      continue;
-    }
-
-    const lines = [];
-    lines.push(`#### ${validator.title ?? validator.id ?? 'DSL'}`);
-    if (validator.description) {
-      lines.push(validator.description);
-    }
-    lines.push('');
-    lines.push(`**Estado:** ${statusVisual(validator.status ?? 'UNKNOWN')} | **Reglas OK:** ${counts.PASS}/${counts.PASS + counts.WARN + counts.FAIL + counts.ERROR}`);
-    lines.push('');
-    lines.push('| Estado | Regla | Evidencia |');
-    lines.push('|---|---|---|');
-    for (const check of passed) {
-      lines.push(`| ${statusVisual(check.status ?? 'UNKNOWN')} | ${escapeTableCell(check.id)} | ${escapeTableCell(check.detail ?? 'OK')} |`);
-    }
-    blocks.push(lines.join('\n'));
-  }
-
-  return blocks.join('\n\n');
-}
-
-function renderExecutionSection(response, artifactPath, validatorCount, checkCount) {
+function renderTechnicalSection(response, artifactPath, validatorCount, checkCount) {
   return [
     '| Indicador | Valor |',
     '|---|---|',
@@ -302,6 +333,19 @@ function calculateComplianceScore(checks) {
 
 function formatScore(score) {
   return `${score}/10`;
+}
+
+function stripTrailingPeriod(value) {
+  return String(value ?? '').replace(/\.+$/, '');
+}
+
+function lowercaseFirst(value) {
+  const text = String(value ?? '');
+  if (text.length === 0) {
+    return text;
+  }
+
+  return `${text[0].toLowerCase()}${text.slice(1)}`;
 }
 
 function statusEmoji(status) {

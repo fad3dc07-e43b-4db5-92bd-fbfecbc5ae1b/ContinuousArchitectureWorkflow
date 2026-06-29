@@ -1,24 +1,24 @@
-# {{title}}
+# Reporte de Validación ArchiMate
 
-> [!NOTE]
-> **Cumplimiento:** {{score}}
-> **Resultado:** {{result}}
-> **Merge permitido:** {{mergeAllowed}}
-> **Errores bloqueantes:** `{{blockingErrors}}`
-> **Advertencias:** `{{warnings}}`
-> **Archivo evaluado:** `{{evaluatedFile}}`
+## Cumplimiento: **{{score}}** — {{result}}
 
-{{warning_block}}
+| Indicador | Valor |
+|---|---|
+| **Resultado** | `{{status}}` |
+| **Decisión** | {{result}} |
+| **Merge permitido** | {{mergeAllowed}} |
+| **Errores bloqueantes** | {{blockingErrors}} |
+| **Advertencias** | {{warnings}} |
+| **Reglas evaluadas** | {{rulesEvaluated}} |
+| **Archivo evaluado** | `{{evaluatedFile}}` |
 
-## {{warning_heading}}
-{{failed_rules_section}}
+## Reglas evaluadas
+
+{{rules_section}}
 
 <details>
-<summary>{{passed_heading}}</summary>
+<summary>Información técnica de ejecución</summary>
 
-{{passed_rules_section}}
-
-### {{execution_heading}}
-{{execution_section}}
+{{technical_section}}
 
 </details>
