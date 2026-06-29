@@ -9,6 +9,8 @@
       "dimension": "Gobierno",
       "severity": "error",
       "scope": "system",
+      "includeInQualityScore": false,
+      "includeInRadar": false,
       "status": "pass",
       "score": 100,
       "evaluated": 5,

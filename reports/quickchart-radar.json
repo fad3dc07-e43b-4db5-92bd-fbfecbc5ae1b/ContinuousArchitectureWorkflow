@@ -2,7 +2,6 @@
   "type": "radar",
   "data": {
     "labels": [
-      "Gobierno",
       "Estructura",
       "Nomenclatura",
       "Integridad",
@@ -13,7 +12,7 @@
     "datasets": [
         {
           "label": "Evaluado",
-          "data": [100, 100, 82, 100, 65, 58, 100],
+          "data": [100, 82, 100, 65, 58, 100],
           "backgroundColor": "rgba(34, 197, 94, 0.20)",
           "borderColor": "#22c55e",
           "pointBackgroundColor": "#22c55e",
@@ -21,7 +20,7 @@
       },
         {
           "label": "Objetivo",
-          "data": [100, 90, 85, 95, 80, 80, 80],
+          "data": [90, 85, 95, 80, 80, 80],
           "backgroundColor": "rgba(156, 163, 175, 0.10)",
           "borderColor": "#9ca3af",
           "pointBackgroundColor": "#9ca3af",

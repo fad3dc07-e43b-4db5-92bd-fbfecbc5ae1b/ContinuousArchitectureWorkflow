@@ -25,13 +25,6 @@ qualityModel:
       - error
 
   dimensions:
-    gobierno:
-      label: Gobierno
-      target: 100
-      rules:
-        - id: contract_consistency_check
-          weight: 100
-
     estructura:
       label: Estructura
       target: 90

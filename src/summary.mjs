@@ -72,6 +72,23 @@ function validateDesignContracts(repoRoot) {
   const qualityDimensions = Object.entries(qualityConfig.qualityModel?.dimensions ?? {});
   const ruleResultsById = new Map((ruleResults.rules ?? []).map((rule) => [rule.ruleId, rule]));
 
+  const contractCheck = ruleResultsById.get('contract_consistency_check');
+  if (!contractCheck) {
+    throw new Error('Contrato inconsistente: falta el resultado interno contract_consistency_check en rule-results.json.');
+  }
+
+  if (contractCheck.includeInQualityScore !== false) {
+    throw new Error('Contrato inconsistente: contract_consistency_check debe tener includeInQualityScore: false.');
+  }
+
+  if (contractCheck.includeInRadar !== false) {
+    throw new Error('Contrato inconsistente: contract_consistency_check debe tener includeInRadar: false.');
+  }
+
+  if (String(contractCheck.status ?? '') !== 'pass') {
+    throw new Error('Contrato inconsistente: contract_consistency_check falló.');
+  }
+
   for (const [, dimension] of qualityDimensions) {
     for (const ruleRef of dimension.rules ?? []) {
       if (!rulesById.has(ruleRef.id)) {
@@ -690,15 +707,17 @@ function renderIssuePanelEntryFinal(check, elementLabel, problemLabel, recommend
 }
 
 function renderSystemErrorSummary(response) {
+  const contractInconsistency = /Contrato inconsistente/i.test(String(response.error ?? ''));
+  const title = contractInconsistency ? 'ERROR — Contrato inconsistente' : 'ERROR — No se pudo completar la validación';
   return [
     '# Calidad del diseño',
     '',
     '## Estado del sistema',
     '',
     '> [!CAUTION]',
-    '> **ERROR — No se pudo completar la validación**',
+    `> **${title}**`,
     '>',
-    '> El motor no pudo completar la validación.',
+    contractInconsistency ? '> La validación encontró una inconsistencia contractual.' : '> El motor no pudo completar la validación.',
     `> **Detalle:** ${normalizeInlineText(response.error ?? 'Error desconocido.')}`,
     '> **Acción:** Revisar el manifiesto, el artefacto de entrada y la configuración del workflow.',
   ];
