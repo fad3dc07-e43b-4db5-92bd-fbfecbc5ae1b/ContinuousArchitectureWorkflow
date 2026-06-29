@@ -15,6 +15,38 @@
       "parentId": null,
       "parentName": null,
       "path": "/Views"
+    },
+    {
+      "id": "folder-as-is",
+      "name": "AS-IS",
+      "type": "views",
+      "parentId": "folder-views",
+      "parentName": "Views",
+      "path": "/Views/AS-IS"
+    },
+    {
+      "id": "folder-to-be",
+      "name": "TO-BE",
+      "type": "views",
+      "parentId": "folder-views",
+      "parentName": "Views",
+      "path": "/Views/TO-BE"
+    },
+    {
+      "id": "folder-business",
+      "name": "Business",
+      "type": "business",
+      "parentId": null,
+      "parentName": null,
+      "path": "/Business"
+    },
+    {
+      "id": "folder-relations",
+      "name": "Relations",
+      "type": "relations",
+      "parentId": null,
+      "parentName": null,
+      "path": "/Relations"
     }
   ],
   "elements": [
@@ -22,6 +54,30 @@
       "id": "el-001",
       "name": "Customer",
       "type": "archimate:BusinessActor",
+      "folderId": "folder-business",
+      "folderName": "Business",
+      "sourceFile": "artifact/source/design.archimate"
+    },
+    {
+      "id": "el-002",
+      "name": "Order Service",
+      "type": "archimate:ApplicationComponent",
+      "folderId": "folder-business",
+      "folderName": "Business",
+      "sourceFile": "artifact/source/design.archimate"
+    },
+    {
+      "id": "el-009",
+      "name": "Legacy Interface",
+      "type": "archimate:ApplicationInterface",
+      "folderId": "folder-business",
+      "folderName": "Business",
+      "sourceFile": "artifact/source/design.archimate"
+    },
+    {
+      "id": "el-012",
+      "name": "employee data management",
+      "type": "archimate:ApplicationFunction",
       "folderId": "folder-business",
       "folderName": "Business",
       "sourceFile": "artifact/source/design.archimate"
@@ -36,6 +92,15 @@
       "target": "el-002",
       "folderId": "folder-relations",
       "folderName": "Relations"
+    },
+    {
+      "id": "rel-014",
+      "name": "",
+      "type": "archimate:AssociationRelationship",
+      "source": "el-001",
+      "target": "el-009",
+      "folderId": "folder-relations",
+      "folderName": "Relations"
     }
   ],
   "views": [
@@ -47,6 +112,24 @@
       "folderName": "Views",
       "elementCount": 12,
       "connectionCount": 8
+    },
+    {
+      "id": "view-002",
+      "name": "AS-IS Business View",
+      "type": "archimate:ArchimateDiagramModel",
+      "folderId": "folder-as-is",
+      "folderName": "AS-IS",
+      "elementCount": 7,
+      "connectionCount": 4
+    },
+    {
+      "id": "view-003",
+      "name": "TO-BE Technology View",
+      "type": "archimate:ArchimateDiagramModel",
+      "folderId": "folder-to-be",
+      "folderName": "TO-BE",
+      "elementCount": 9,
+      "connectionCount": 6
     }
   ],
   "diagramObjects": [
@@ -58,6 +141,15 @@
       "y": 60,
       "width": 180,
       "height": 55
+    },
+    {
+      "id": "obj-002",
+      "viewId": "view-001",
+      "elementRef": "el-002",
+      "x": 260,
+      "y": 60,
+      "width": 180,
+      "height": 55
     }
   ],
   "diagramConnections": [
@@ -65,6 +157,14 @@
       "id": "conn-001",
       "viewId": "view-001",
       "relationshipRef": "rel-001",
+      "source": "obj-001",
+      "target": "obj-002",
+      "bendpoints": []
+    },
+    {
+      "id": "conn-002",
+      "viewId": "view-001",
+      "relationshipRef": "rel-014",
       "source": "obj-001",
       "target": "obj-002",
       "bendpoints": []

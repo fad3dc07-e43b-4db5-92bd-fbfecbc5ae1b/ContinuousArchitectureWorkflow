@@ -29,12 +29,8 @@ qualityModel:
       label: Estructura
       target: 90
       rules:
-        - id: raiz_archimate_model_regla
-          weight: 25
-        - id: carpetas_raiz_archi_regla
-          weight: 25
         - id: carpetas_obligatorias_regla
-          weight: 50
+          weight: 100
 
     nomenclatura:
       label: Nomenclatura
@@ -47,31 +43,15 @@ qualityModel:
       label: Integridad
       target: 95
       rules:
-        - id: documento_texto_plano_regla
-          weight: 10
-        - id: xml_bien_formado_regla
-          weight: 15
-        - id: namespace_archimate_regla
-          weight: 15
-        - id: namespace_xsi_regla
-          weight: 10
-        - id: atributos_modelo_regla
-          weight: 10
-        - id: elementos_archimate_regla
-          weight: 15
-        - id: identificadores_unicos_regla
-          weight: 10
         - id: referencias_rotas_regla
-          weight: 15
+          weight: 100
 
     relaciones:
       label: Relaciones
       target: 80
       rules:
-        - id: relaciones_archi_regla
-          weight: 40
         - id: abuso_association_regla
-          weight: 60
+          weight: 100
 
     trazabilidad:
       label: Trazabilidad
@@ -84,11 +64,9 @@ qualityModel:
       label: Legibilidad
       target: 80
       rules:
-        - id: vistas_archi_regla
-          weight: 20
         - id: vistas_vacias_regla
-          weight: 25
-        - id: exceso_elementos_por_vista_regla
-          weight: 25
-        - id: exceso_relaciones_por_vista_regla
           weight: 30
+        - id: exceso_elementos_por_vista_regla
+          weight: 35
+        - id: exceso_relaciones_por_vista_regla
+          weight: 35

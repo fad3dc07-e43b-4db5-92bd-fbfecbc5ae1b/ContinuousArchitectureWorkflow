@@ -1,4 +1,11 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { loadYamlFile } from './infra/yaml.mjs';
+
 export async function renderDesignSummary(response) {
+  validateDesignContracts(response.repoRoot ?? process.cwd());
+
   if (response.systemStatus === 'ERROR') {
     return `${renderSystemErrorSummary(response).join('\n').trimEnd()}\n`;
   }
@@ -43,6 +50,73 @@ function countChecks(checks) {
     acc[key] += 1;
     return acc;
   }, { PASS: 0, WARN: 0, FAIL: 0, ERROR: 0 });
+}
+
+function validateDesignContracts(repoRoot) {
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const adapterPath = path.join(root, '.calinter', 'archi-rules.yml');
+  const qualityPath = path.join(root, '.calinter', 'archi-quality.yml');
+  const ruleResultsPath = path.join(root, 'reports', 'rule-results.json');
+  const qualityScorePath = path.join(root, 'reports', 'quality-score.json');
+  const quickchartPath = path.join(root, 'reports', 'quickchart-radar.json');
+
+  const rulesConfig = loadYamlFile(adapterPath);
+  const qualityConfig = loadYamlFile(qualityPath);
+  const ruleResults = readJsonFile(ruleResultsPath);
+  const qualityScore = readJsonFile(qualityScorePath);
+  const quickchart = readJsonFile(quickchartPath);
+
+  const definedRules = new Set(Object.keys(rulesConfig.rules ?? {}));
+  const referencedQualityRules = new Set(
+    Object.values(qualityConfig.qualityModel?.dimensions ?? {}).flatMap((dimension) => (dimension.rules ?? []).map((rule) => rule.id))
+  );
+  const resultRuleIds = new Set((ruleResults.rules ?? []).map((rule) => rule.ruleId));
+  const scoredRuleIds = new Set(
+    (qualityScore.dimensions ?? []).flatMap((dimension) => (dimension.rules ?? []).map((rule) => rule.ruleId))
+  );
+
+  for (const ruleId of referencedQualityRules) {
+    if (!definedRules.has(ruleId)) {
+      throw new Error(`Contrato inválido: quality.yml referencia la regla inexistente '${ruleId}'.`);
+    }
+  }
+
+  for (const ruleId of scoredRuleIds) {
+    if (!resultRuleIds.has(ruleId)) {
+      throw new Error(`Contrato inválido: quality-score.json usa la regla '${ruleId}' sin resultado en rule-results.json.`);
+    }
+  }
+
+  const radarLabels = quickchart?.data?.labels ?? [];
+  const radarOrder = qualityScore.radarOrder ?? [];
+  const evaluatedSeries = quickchart?.data?.datasets?.[0]?.data ?? [];
+  const targetSeries = quickchart?.data?.datasets?.[1]?.data ?? [];
+  const dimensionScores = (qualityScore.dimensions ?? []).map((dimension) => dimension.score);
+  const dimensionTargets = (qualityScore.dimensions ?? []).map((dimension) => dimension.target);
+
+  if (!arraysEqual(radarLabels, radarOrder)) {
+    throw new Error('Contrato inválido: quickchart-radar.json no coincide con quality-score.json en el orden de dimensiones.');
+  }
+
+  if (!arraysEqual(evaluatedSeries, dimensionScores)) {
+    throw new Error('Contrato inválido: quickchart-radar.json no coincide con quality-score.json en el dataset Evaluado.');
+  }
+
+  if (!arraysEqual(targetSeries, dimensionTargets)) {
+    throw new Error('Contrato inválido: quickchart-radar.json no coincide con quality-score.json en el dataset Objetivo.');
+  }
+}
+
+function readJsonFile(filePath) {
+  return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+}
+
+function arraysEqual(left, right) {
+  if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((value, index) => value === right[index]);
 }
 
 function flattenChecks(validators) {

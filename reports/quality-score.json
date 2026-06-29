@@ -23,9 +23,7 @@
       "status": "pass",
       "weightTotal": 100,
       "rules": [
-        { "ruleId": "raiz_archimate_model_regla", "weight": 25, "score": 100 },
-        { "ruleId": "carpetas_raiz_archi_regla", "weight": 25, "score": 100 },
-        { "ruleId": "carpetas_obligatorias_regla", "weight": 50, "score": 100 }
+        { "ruleId": "carpetas_obligatorias_regla", "weight": 100, "score": 100 }
       ]
     },
     {
@@ -47,14 +45,7 @@
       "status": "pass",
       "weightTotal": 100,
       "rules": [
-        { "ruleId": "documento_texto_plano_regla", "weight": 10, "score": 100 },
-        { "ruleId": "xml_bien_formado_regla", "weight": 15, "score": 100 },
-        { "ruleId": "namespace_archimate_regla", "weight": 15, "score": 100 },
-        { "ruleId": "namespace_xsi_regla", "weight": 10, "score": 100 },
-        { "ruleId": "atributos_modelo_regla", "weight": 10, "score": 100 },
-        { "ruleId": "elementos_archimate_regla", "weight": 15, "score": 100 },
-        { "ruleId": "identificadores_unicos_regla", "weight": 10, "score": 100 },
-        { "ruleId": "referencias_rotas_regla", "weight": 15, "score": 100 }
+        { "ruleId": "referencias_rotas_regla", "weight": 100, "score": 100 }
       ]
     },
     {
@@ -65,8 +56,7 @@
       "status": "warning",
       "weightTotal": 100,
       "rules": [
-        { "ruleId": "relaciones_archi_regla", "weight": 40, "score": 100 },
-        { "ruleId": "abuso_association_regla", "weight": 60, "score": 65 }
+        { "ruleId": "abuso_association_regla", "weight": 100, "score": 65 }
       ]
     },
     {
@@ -88,10 +78,9 @@
       "status": "pass",
       "weightTotal": 100,
       "rules": [
-        { "ruleId": "vistas_archi_regla", "weight": 20, "score": 100 },
-        { "ruleId": "vistas_vacias_regla", "weight": 25, "score": 100 },
-        { "ruleId": "exceso_elementos_por_vista_regla", "weight": 25, "score": 100 },
-        { "ruleId": "exceso_relaciones_por_vista_regla", "weight": 30, "score": 100 }
+        { "ruleId": "vistas_vacias_regla", "weight": 30, "score": 100 },
+        { "ruleId": "exceso_elementos_por_vista_regla", "weight": 35, "score": 100 },
+        { "ruleId": "exceso_relaciones_por_vista_regla", "weight": 35, "score": 100 }
       ]
     }
   ]
