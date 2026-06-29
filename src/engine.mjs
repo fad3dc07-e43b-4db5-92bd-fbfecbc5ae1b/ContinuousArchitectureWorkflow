@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import Table from 'cli-table3';
 import { getArg, resolveArgPath } from './infra/args.mjs';
 import { isFile, readText } from './infra/fs.mjs';
 import { loadYamlFile } from './infra/yaml.mjs';
@@ -12,7 +11,7 @@ export const Engine = {
   version: '2.0.0',
   defaultManifestPath: 'specs/manifest.yaml',
 
-  main() {
+  async main() {
     const mode = getArg('--mode', 'validate');
     const repoRoot = resolveArgPath('--repo-root', process.cwd());
     const manifestPath = resolveArgPath('--manifest', path.join(process.cwd(), this.defaultManifestPath));
@@ -24,7 +23,7 @@ export const Engine = {
 
         if (summaryFile) {
           fs.mkdirSync(path.dirname(summaryFile), { recursive: true });
-          fs.writeFileSync(summaryFile, this.renderSummary(response), 'utf8');
+          fs.writeFileSync(summaryFile, await this.renderSummary(response), 'utf8');
         }
 
         process.stdout.write(`${response.systemStatus === 'ERROR' ? 'ERROR' : 'PASS'}\n`);
@@ -35,7 +34,7 @@ export const Engine = {
 
         if (summaryFile) {
           fs.mkdirSync(path.dirname(summaryFile), { recursive: true });
-          fs.writeFileSync(summaryFile, this.renderSummary(response), 'utf8');
+          fs.writeFileSync(summaryFile, await this.renderSummary(response), 'utf8');
         }
 
         process.stdout.write('ERROR\n');
@@ -89,9 +88,9 @@ export const Engine = {
     };
   },
 
-  renderSummary(response) {
+  async renderSummary(response) {
     if (response.systemStatus === 'ERROR') {
-      return `${renderSystemErrorSummary(response).trimEnd()}\n`;
+      return `${renderSystemErrorSummary(response).join('\n').trimEnd()}\n`;
     }
 
     const validators = response.validators ?? [];
@@ -99,31 +98,29 @@ export const Engine = {
     const passChecks = checks.filter((check) => check.status === 'PASS');
     const warnChecks = checks.filter((check) => check.status === 'WARN');
     const failChecks = checks.filter((check) => check.status === 'FAIL');
-    const artifactPath = response.artifact?.current
-      ? toRelativePath(response.repoRoot, response.artifact.current)
-      : (response.artifact?.source?.path ?? 'Unknown');
     const score = calculateComplianceScore(checks);
-    const mergeAllowed = isMergeAllowedSummary({ failCount: failChecks.length, systemError: false });
     const rulesEvaluated = checks.length;
-    const rulesPassed = passChecks.length;
     const dslCount = validators.length;
+    const statusCounts = countChecks(checks);
+    const dashboard = await renderDashboardSectionFinal({
+      validators,
+      score,
+      passCount: statusCounts.PASS,
+      warnCount: statusCounts.WARN,
+      failCount: statusCounts.FAIL,
+      rulesEvaluated,
+      dslCount,
+      resultLabel: getResultLabel({ failCount: failChecks.length, warnCount: warnChecks.length, systemError: false }),
+    });
 
     return `${[
       '# Reporte de Validación ArchiMate',
       '',
-      ...renderDashboardHeaderFinal({
-        artifactPath,
-        score,
-        mergeAllowed,
-        failCount: failChecks.length,
-        warnCount: warnChecks.length,
-        rulesEvaluated,
-        rulesPassed,
-        dslCount,
-      }),
+      ...dashboard.lines,
       ...renderWarningPanelFinal(warnChecks),
       ...renderCautionPanelFinal(failChecks),
       ...renderTipPanelFinal(validators, passChecks),
+      ...dashboard.systemIssueLines,
     ].join('\n').trimEnd()}\n`;
   },
 };
@@ -184,51 +181,263 @@ function isMergeAllowedSummary({ failCount, systemError }) {
   return !systemError && failCount === 0;
 }
 
-function renderDashboardHeaderFinal({ artifactPath, score, mergeAllowed, failCount, warnCount, rulesEvaluated, rulesPassed, dslCount }) {
-  const scoreText = formatScore(score);
-  const resultLabel = getResultLabel({ failCount, warnCount, systemError: false });
-  const header = new Table({
-    chars: {
-      top: '-',
-      'top-mid': '+',
-      'top-left': '+',
-      'top-right': '+',
-      bottom: '-',
-      'bottom-mid': '+',
-      'bottom-left': '+',
-      'bottom-right': '+',
-      left: '|',
-      'left-mid': '+',
-      mid: '-',
-      'mid-mid': '+',
-      right: '|',
-      'right-mid': '+',
-      middle: '|',
-    },
-    colWidths: [12, 49],
-    wordWrap: true,
-    style: {
-      'padding-left': 1,
-      'padding-right': 1,
-      head: [],
-      border: [],
-    },
-    colAligns: ['left', 'left'],
-  });
+async function renderDashboardSectionFinal({ validators, score, passCount, warnCount, failCount, rulesEvaluated, dslCount, resultLabel }) {
+  try {
+    const [complianceUrl, distributionUrl, dimensionsUrl] = await Promise.all([
+      createQuickChartUrl(buildComplianceChartConfig({ score, failCount, warnCount })),
+      createQuickChartUrl(buildDistributionChartConfig({ passCount, warnCount, failCount })),
+      createQuickChartUrl(buildDimensionsChartConfig(buildDimensionSummaries(validators))),
+    ]);
 
-  header.push(
-    [{ colSpan: 2, content: 'VALIDACIÓN ARCHIMATE', hAlign: 'center' }],
-    ['Archivo', artifactPath],
-    ['Resultado', `${resultLabel}  ${scoreText}`],
-    ['Merge', mergeAllowed ? 'Permitido' : 'Bloqueado']
-  );
+    return {
+      lines: [
+        '## Dashboard de cumplimiento',
+        '',
+        `![Cumplimiento general](${complianceUrl})`,
+        `![Distribución de resultados](${distributionUrl})`,
+        `![Calidad por dimensión](${dimensionsUrl})`,
+        '',
+      ],
+      systemIssueLines: [],
+    };
+  } catch (error) {
+    return {
+      lines: [
+        '## Dashboard de cumplimiento',
+        '',
+        '```text',
+        `Cumplimiento: ${formatScore(score)}`,
+        `Resultado: ${resultLabel}`,
+        `PASS: ${formatCount(passCount)} · WARN: ${formatCount(warnCount)} · FAIL: ${formatCount(failCount)}`,
+        `Reglas evaluadas: ${formatCount(rulesEvaluated)} · DSLs: ${formatCount(dslCount)}`,
+        '```',
+        '',
+      ],
+      systemIssueLines: [
+        '## Estado del sistema',
+        '',
+        '> [!CAUTION]',
+        '> **ERROR — No se pudieron generar los gráficos del dashboard**',
+        '>',
+        `> **Detalle:** ${normalizeInlineText(error?.message ?? 'QuickChart no respondió.')}`,
+        '> **Acción:** revisar conectividad hacia QuickChart o usar fallback textual.',
+        '',
+      ],
+    };
+  }
+}
 
-  return [
-    '```text',
-    header.toString(),
-    '```',
-    '',
+function buildComplianceChartConfig({ score, failCount, warnCount }) {
+  const safeScore = Math.max(0, Math.min(10, Number(score) || 0));
+  const remaining = Math.max(0, 10 - safeScore);
+  const scoreColorHex = getScoreColor(safeScore, failCount, warnCount);
+
+  return {
+    type: 'doughnut',
+    data: {
+      labels: ['Cumplimiento', 'Pendiente'],
+      datasets: [
+        {
+          data: [safeScore, remaining],
+          backgroundColor: [scoreColorHex, '#e5e7eb'],
+          borderWidth: 0,
+        },
+      ],
+    },
+    options: {
+      plugins: {
+        legend: { display: false },
+        title: {
+          display: true,
+          text: `Cumplimiento general ${formatScore(safeScore)}`,
+        },
+      },
+      cutout: '70%',
+    },
+  };
+}
+
+function buildDistributionChartConfig({ passCount, warnCount, failCount }) {
+  return {
+    type: 'bar',
+    data: {
+      labels: ['PASS', 'WARN', 'FAIL'],
+      datasets: [
+        {
+          label: 'Reglas',
+          data: [passCount, warnCount, failCount],
+          backgroundColor: ['#22c55e', '#f59e0b', '#ef4444'],
+        },
+      ],
+    },
+    options: {
+      plugins: {
+        legend: { display: false },
+        title: {
+          display: true,
+          text: 'Distribución de reglas',
+        },
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: { precision: 0 },
+        },
+      },
+    },
+  };
+}
+
+function buildDimensionsChartConfig(dimensions) {
+  return {
+    type: 'bar',
+    data: {
+      labels: dimensions.map((dimension) => dimension.label),
+      datasets: [
+        {
+          label: 'Score',
+          data: dimensions.map((dimension) => dimension.score),
+          backgroundColor: dimensions.map((dimension) => dimension.color),
+        },
+      ],
+    },
+    options: {
+      indexAxis: 'y',
+      plugins: {
+        legend: { display: false },
+        title: {
+          display: true,
+          text: 'Calidad por dimensión',
+        },
+      },
+      scales: {
+        x: {
+          min: 0,
+          max: 10,
+          ticks: { stepSize: 2, precision: 0 },
+        },
+      },
+    },
+  };
+}
+
+function buildDimensionSummaries(validators) {
+  const dimensions = [
+    {
+      label: 'Consistencia XML',
+      matches: ({ validator, check }) => validator.dslType === 'archi-consistency' && check.group === 'document',
+    },
+    {
+      label: 'Identidad Archi',
+      matches: ({ validator, check }) => validator.dslType === 'archi-consistency' && check.group === 'archiIdentity',
+    },
+    {
+      label: 'Estructura Archi',
+      matches: ({ validator, check }) => validator.dslType === 'archi-consistency' && check.group === 'archiStructure',
+    },
+    {
+      label: 'Integridad interna',
+      matches: ({ validator, check }) => validator.dslType === 'archi-consistency' && check.group === 'internalIntegrity',
+    },
+    {
+      label: 'Estilo',
+      matches: ({ validator, check }) => validator.dslType === 'archi-style' && check.group !== 'Views',
+    },
+    {
+      label: 'Vistas',
+      matches: ({ validator, check }) => validator.dslType === 'archi-style' && check.group === 'Views',
+    },
   ];
+
+  return dimensions.map((dimension) => {
+    let passCount = 0;
+    let warnCount = 0;
+    let failCount = 0;
+
+    for (const validator of validators) {
+      for (const check of validator.checks ?? []) {
+        if (!dimension.matches({ validator, check })) {
+          continue;
+        }
+
+        if (check.status === 'PASS') {
+          passCount += 1;
+        } else if (check.status === 'WARN') {
+          warnCount += 1;
+        } else if (check.status === 'FAIL') {
+          failCount += 1;
+        }
+      }
+    }
+
+    const score = Math.max(0, 10 - warnCount - (failCount * 4));
+
+    return {
+      label: dimension.label,
+      score,
+      passCount,
+      warnCount,
+      failCount,
+      color: getScoreColor(score, failCount, warnCount),
+    };
+  });
+}
+
+function getScoreColor(score, failCount, warnCount) {
+  if (failCount > 0) {
+    return '#ef4444';
+  }
+
+  if (warnCount > 0 || Number(score) < 10) {
+    return '#f59e0b';
+  }
+
+  return '#22c55e';
+}
+
+async function createQuickChartUrl(chartConfig, { width = 500, height = 300 } = {}) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+  try {
+    const response = await fetch('https://quickchart.io/chart/create', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        version: '4',
+        backgroundColor: 'white',
+        width,
+        height,
+        format: 'png',
+        devicePixelRatio: 2,
+        chart: chartConfig,
+      }),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(`QuickChart request failed: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    const url = data.shortUrl ?? data.url;
+
+    if (!url) {
+      throw new Error('QuickChart response did not include url.');
+    }
+
+    return url;
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw new Error('QuickChart request timed out after 15 seconds.');
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 function getResultLabel({ failCount, warnCount, systemError }) {
@@ -1185,5 +1394,5 @@ function buildErrorResponse(manifestPath, error) {
 Engine.buildErrorResponse = buildErrorResponse;
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  Engine.main();
+  await Engine.main();
 }
