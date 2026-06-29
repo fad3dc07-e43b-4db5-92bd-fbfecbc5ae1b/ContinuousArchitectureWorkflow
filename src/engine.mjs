@@ -194,16 +194,24 @@ function renderDashboardHeaderFinal({ artifactPath, score, decision, mergeAllowe
   const dslLabel = formatCount(dslCount);
 
   return [
-    `> ## Cumplimiento: **${scoreText}** — ${decision}`,
-    '>',
-    '> | Resumen del artefacto evaluado |',
-    '> |---|',
     `> | **Archivo:** \`${escapeInlineCode(artifactPath)}\` |`,
-    `> | **Merge:** ${mergeAllowed ? 'Permitido' : 'Bloqueado'} |`,
-    `> | **FAIL 🔴:** **${failLabel.startsWith('99+') ? '99+' : formatCount(failCount)}** bloqueantes · **WARN 🟡:** **${warnCount > 99 ? '99+' : formatCount(warnCount)}** ${warnCount === 1 ? 'observación' : 'observaciones'} · **PASS 🟢:** **${rulesPassed > 99 ? '99+' : formatCount(rulesPassed)}** reglas |`,
+    `> | **Evaluación:** ${renderEvaluationState(failCount, warnCount)} · **${scoreText}** |`,
+    `> | **FAIL:** **${failLabel.startsWith('99+') ? '99+' : formatCount(failCount)}** bloqueantes | **WARN:** **${warnCount > 99 ? '99+' : formatCount(warnCount)}** ${warnCount === 1 ? 'observación' : 'observaciones'} | **PASS:** **${rulesPassed > 99 ? '99+' : formatCount(rulesPassed)}** reglas |`,
     `> | **Reglas evaluadas:** **${rulesLabel}** · **DSLs ejecutados:** **${dslLabel}** |`,
     '',
   ];
+}
+
+function renderEvaluationState(failCount, warnCount) {
+  if (failCount > 0) {
+    return '🔴 NO ACEPTABLE';
+  }
+
+  if (warnCount > 0) {
+    return '🟡 ACEPTABLE CON OBSERVACIONES';
+  }
+
+  return '🟢 ACEPTABLE';
 }
 
 function formatCount(value) {
