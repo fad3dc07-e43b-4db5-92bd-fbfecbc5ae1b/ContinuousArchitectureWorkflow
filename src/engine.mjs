@@ -10,21 +10,8 @@ import { validateDslData, validateManifestData } from './core/schemas.mjs';
 export const Engine = {
   version: '2.0.0',
   defaultManifestPath: 'specs/manifest.yaml',
-  summaryTemplate: {
-    title: 'Architecture Compliance Report',
-    templateFile: 'specs/summary-template.md',
-    noteLabels: {
-      score: 'Cumplimiento',
-      result: 'Resultado',
-      mergeAllowed: 'Merge permitido',
-      blockingErrors: 'Errores bloqueantes',
-      warnings: 'Advertencias',
-      evaluatedFile: 'Archivo evaluado',
-    },
-    warningHeading: 'Reglas no cumplidas',
-    passedHeading: 'Reglas cumplidas',
-    executionHeading: 'Información de ejecución',
-  },
+  defaultSummaryTemplatePath: 'specs/summary-template.md',
+  defaultWarningTemplatePath: 'specs/warning-template.md',
 
   main() {
     const mode = getArg('--mode', 'validate');
@@ -89,7 +76,7 @@ export const Engine = {
       });
     });
 
-    return buildResponse(repoRoot, manifestPath, artifact, validators);
+    return buildResponse(repoRoot, manifestPath, manifest, artifact, validators);
   },
 
   buildValidateResponse(response) {
@@ -104,7 +91,6 @@ export const Engine = {
   },
 
   renderSummary(response) {
-    const template = this.summaryTemplate;
     const validators = response.validators ?? [];
     const allChecks = validators.flatMap((validator) => (validator.checks ?? []).map((check) => ({ validator, check })));
     const actionable = allChecks.filter(({ check }) => check.status !== 'PASS');
@@ -116,24 +102,22 @@ export const Engine = {
       ? toRelativePath(response.repoRoot, response.artifact.current)
       : (response.artifact?.source?.path ?? 'Unknown');
     const globalScore = response.systemStatus === 'ERROR' ? null : calculateComplianceScore(ruleChecks);
-    const noteLines = [
-      `**${template.noteLabels.score}:** ${globalScore === null ? 'No evaluable' : formatScore(globalScore)}`,
-      `**${template.noteLabels.result}:** ${decisionFromLintStatus(status)}`,
-      `**${template.noteLabels.mergeAllowed}:** ${isMergeAllowed(status) ? 'Sí' : 'No'}`,
-      `**${template.noteLabels.blockingErrors}:** \`${stats.failures}\``,
-      `**${template.noteLabels.warnings}:** \`${stats.warnings}\``,
-      `**${template.noteLabels.evaluatedFile}:** \`${escapeTableCell(artifactPath)}\``,
-    ];
-    const templateText = loadSummaryTemplate(template.templateFile, response.manifest);
-    const rendered = renderSummaryTemplate(templateText, {
-      title: template.title,
-      note_section: renderNoteSection(noteLines),
-      warning_section: renderWarningSection(status, actionable, response.error, executive),
-      warning_heading: template.warningHeading,
+    const summaryTemplatePath = resolveTemplatePath(response.manifest, response.summaryTemplatePath ?? this.defaultSummaryTemplatePath);
+    const warningTemplatePath = resolveTemplatePath(response.manifest, response.warningTemplatePath ?? this.defaultWarningTemplatePath);
+    const rendered = renderTemplate(loadTemplateFile(summaryTemplatePath), {
+      title: 'Architecture Compliance Report',
+      score: globalScore === null ? 'No evaluable' : formatScore(globalScore),
+      result: decisionFromLintStatus(status),
+      mergeAllowed: isMergeAllowed(status) ? 'Sí' : 'No',
+      blockingErrors: String(stats.failures),
+      warnings: String(stats.warnings),
+      evaluatedFile: escapeTableCell(artifactPath),
+      warning_block: renderWarningBlock(warningTemplatePath, status, actionable, response.error),
+      warning_heading: 'Reglas no cumplidas',
       failed_rules_section: renderFailedRulesSection(response.systemStatus, actionable),
-      passed_heading: template.passedHeading,
+      passed_heading: 'Reglas cumplidas',
       passed_rules_section: renderPassedRulesSection(validators),
-      execution_heading: template.executionHeading,
+      execution_heading: 'Información de ejecución',
       execution_section: renderExecutionSection(response, artifactPath, validators.length, allChecks.length),
     });
 
@@ -141,64 +125,38 @@ export const Engine = {
   },
 };
 
-function loadSummaryTemplate(templateFile, manifestPath) {
-  const manifestDir = path.dirname(manifestPath);
-  const candidate = path.resolve(manifestDir, templateFile);
-  if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
-    return fs.readFileSync(candidate, 'utf8');
+function loadTemplateFile(templatePath) {
+  if (!fs.existsSync(templatePath) || !fs.statSync(templatePath).isFile()) {
+    throw new Error(`No se encontró la plantilla de resumen: ${templatePath}`);
   }
 
-  return [
-    '# {{title}}',
-    '',
-    '{{note_section}}',
-    '',
-    '{{warning_section}}',
-    '',
-    '## {{warning_heading}}',
-    '{{failed_rules_section}}',
-    '',
-    '<details>',
-    '<summary>{{passed_heading}}</summary>',
-    '',
-    '{{passed_rules_section}}',
-    '',
-    '### {{execution_heading}}',
-    '{{execution_section}}',
-    '',
-    '</details>',
-  ].join('\n');
+  return fs.readFileSync(templatePath, 'utf8');
 }
 
-function renderSummaryTemplate(template, values) {
+function resolveTemplatePath(manifestPath, templatePath) {
+  return path.resolve(path.dirname(manifestPath), templatePath);
+}
+
+function renderTemplate(template, values) {
   return template.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_match, key) => String(values[key] ?? ''));
 }
 
-function renderNoteSection(noteLines) {
-  const lines = ['> [!NOTE]'];
-  for (const item of noteLines) {
-    lines.push(`> ${item}`);
-  }
-  return lines.join('\n');
-}
-
-function renderWarningSection(status, actionable, error, executive) {
+function renderWarningBlock(templatePath, status, actionable, error) {
   if (status === 'WARN' && actionable.length > 0) {
     const current = actionable[0]?.check ?? {};
-    return [
-      '> [!WARNING]',
-      `> **Regla no cumplida:** ${escapeTableCell(current.id ?? 'N/A')}`,
-      `> **Ubicación:** ${escapeTableCell(current.group ?? 'General')}`,
-      `> **Elemento:** ${escapeTableCell(current.detail ?? current.message ?? 'N/A')}`,
-      `> **Problema:** ${escapeTableCell(current.message ?? current.detail ?? 'Revisar el hallazgo reportado.')}`,
-      `> **Recomendación:** ${escapeTableCell(suggestAction(current))}`,
-    ].join('\n');
+    return renderTemplate(loadTemplateFile(templatePath), {
+      ruleId: current.id ?? 'N/A',
+      location: current.group ?? 'General',
+      element: current.detail ?? current.message ?? 'N/A',
+      problem: current.message ?? current.detail ?? 'Revisar el hallazgo reportado.',
+      recommendation: suggestAction(current),
+    });
   }
 
   if (status === 'FAIL' || error) {
     return [
       '> [!CAUTION]',
-      `> ${executive.summaryLine}`,
+      `> ${error ?? 'El diseño no cumple.'}`,
     ].join('\n');
   }
 
@@ -704,7 +662,7 @@ function buildRuleResult(id, rule, status, detail, failureMessage, group) {
   };
 }
 
-function buildResponse(repoRoot, manifestPath, artifact, validators) {
+function buildResponse(repoRoot, manifestPath, manifest, artifact, validators) {
   const summary = {
     pass: validators.filter((item) => item.status === 'PASS').length,
     warn: validators.filter((item) => item.status === 'WARN').length,
@@ -716,6 +674,8 @@ function buildResponse(repoRoot, manifestPath, artifact, validators) {
   return {
     manifest: manifestPath,
     repoRoot,
+    summaryTemplatePath: manifest.summaryTemplatePath,
+    warningTemplatePath: manifest.warningTemplatePath,
     artifact,
     status: lintStatus,
     systemStatus: 'PASS',

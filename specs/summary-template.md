@@ -1,8 +1,14 @@
 # {{title}}
 
-{{note_section}}
+> [!NOTE]
+> **Cumplimiento:** {{score}}
+> **Resultado:** {{result}}
+> **Merge permitido:** {{mergeAllowed}}
+> **Errores bloqueantes:** `{{blockingErrors}}`
+> **Advertencias:** `{{warnings}}`
+> **Archivo evaluado:** `{{evaluatedFile}}`
 
-{{warning_section}}
+{{warning_block}}
 
 ## {{warning_heading}}
 {{failed_rules_section}}
