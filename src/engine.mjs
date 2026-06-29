@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import stringWidth from 'string-width';
+import Table from 'cli-table3';
 import { getArg, resolveArgPath } from './infra/args.mjs';
 import { isFile, readText } from './infra/fs.mjs';
 import { loadYamlFile } from './infra/yaml.mjs';
@@ -103,7 +103,6 @@ export const Engine = {
       ? toRelativePath(response.repoRoot, response.artifact.current)
       : (response.artifact?.source?.path ?? 'Unknown');
     const score = calculateComplianceScore(checks);
-    const decision = getDecision({ score, failCount: failChecks.length, warnCount: warnChecks.length, systemError: false });
     const mergeAllowed = isMergeAllowedSummary({ failCount: failChecks.length, systemError: false });
     const rulesEvaluated = checks.length;
     const rulesPassed = passChecks.length;
@@ -115,7 +114,6 @@ export const Engine = {
       ...renderDashboardHeaderFinal({
         artifactPath,
         score,
-        decision,
         mergeAllowed,
         failCount: failChecks.length,
         warnCount: warnChecks.length,
@@ -186,50 +184,51 @@ function isMergeAllowedSummary({ failCount, systemError }) {
   return !systemError && failCount === 0;
 }
 
-function renderDashboardHeaderFinal({ artifactPath, score, decision, mergeAllowed, failCount, warnCount, rulesEvaluated, rulesPassed, dslCount }) {
+function renderDashboardHeaderFinal({ artifactPath, score, mergeAllowed, failCount, warnCount, rulesEvaluated, rulesPassed, dslCount }) {
   const scoreText = formatScore(score);
   const resultLabel = getResultLabel({ failCount, warnCount, systemError: false });
-  const evaluatedFile = artifactPath;
-  const labelWidth = 10;
-  const valueWidth = 45;
-  const headerWidth = 60;
-  const topBorder = `┌${'─'.repeat(headerWidth)}┐`;
-  const separator = '├────────────┬─────────────────────────────────────────────────┤';
-  const bottomBorder = '└────────────┴─────────────────────────────────────────────────┘';
-  const resultText = renderResultValue(resultLabel, scoreText, valueWidth);
+  const header = new Table({
+    chars: {
+      top: '-',
+      'top-mid': '+',
+      'top-left': '+',
+      'top-right': '+',
+      bottom: '-',
+      'bottom-mid': '+',
+      'bottom-left': '+',
+      'bottom-right': '+',
+      left: '|',
+      'left-mid': '+',
+      mid: '-',
+      'mid-mid': '+',
+      right: '|',
+      'right-mid': '+',
+      middle: '|',
+    },
+    colWidths: [12, 49],
+    wordWrap: true,
+    style: {
+      'padding-left': 1,
+      'padding-right': 1,
+      head: [],
+      border: [],
+    },
+    colAligns: ['left', 'left'],
+  });
+
+  header.push(
+    [{ colSpan: 2, content: 'VALIDACIÓN ARCHIMATE', hAlign: 'center' }],
+    ['Archivo', artifactPath],
+    ['Resultado', `${resultLabel}  ${scoreText}`],
+    ['Merge', mergeAllowed ? 'Permitido' : 'Bloqueado']
+  );
 
   return [
-    '> ```text',
-    `> ${topBorder}`,
-    `> │ ${visualPadEnd('VALIDACIÓN ARCHIMATE', 58)} │`,
-    `> ${separator}`,
-    `> ${renderDashboardRow('Archivo', evaluatedFile, labelWidth, valueWidth)}`,
-    `> ${renderDashboardRow('Resultado', resultText, labelWidth, valueWidth)}`,
-    `> ${renderDashboardRow('Merge', mergeAllowed ? 'Permitido' : 'Bloqueado', labelWidth, valueWidth)}`,
-    `> ${bottomBorder}`,
-    '> ```',
+    '```text',
+    header.toString(),
+    '```',
     '',
   ];
-}
-
-function renderDashboardRow(label, value, labelWidth, valueWidth) {
-  const left = visualPadEnd(label, labelWidth);
-  const right = visualPadEnd(value, valueWidth);
-  return `│ ${left} │ ${right} │`;
-}
-
-function renderResultValue(resultLabel, scoreText, valueWidth) {
-  const scoreWidth = stringWidth(scoreText);
-  const labelWidth = Math.max(0, valueWidth - scoreWidth);
-  const left = visualPadEnd(resultLabel, labelWidth);
-  return `${left}${scoreText}`;
-}
-
-function visualPadEnd(value, width) {
-  const text = String(value ?? '');
-  const visible = stringWidth(text);
-  const padding = Math.max(0, width - visible);
-  return `${text}${' '.repeat(padding)}`;
 }
 
 function getResultLabel({ failCount, warnCount, systemError }) {
