@@ -191,10 +191,6 @@ async function renderDashboardSectionFinal({ validators, score, passCount, warnC
 
     return {
       lines: [
-        '## Dashboard de cumplimiento',
-        '',
-        '| Cumplimiento | Reglas | Dimensiones |',
-        '|---|---|---|',
         `| <img src="${complianceUrl}" width="220" alt="Cumplimiento general"> | <img src="${distributionUrl}" width="260" alt="Distribución de resultados"> | <img src="${dimensionsUrl}" width="300" alt="Calidad por dimensión"> |`,
         '',
       ],
@@ -203,8 +199,6 @@ async function renderDashboardSectionFinal({ validators, score, passCount, warnC
   } catch (error) {
     return {
       lines: [
-        '## Dashboard de cumplimiento',
-        '',
         '```text',
         `Cumplimiento: ${formatScore(score)}`,
         `Resultado: ${resultLabel}`,
