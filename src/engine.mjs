@@ -95,39 +95,34 @@ export const Engine = {
 
     const validators = response.validators ?? [];
     const checks = flattenChecks(validators);
+    const passChecks = checks.filter((check) => check.status === 'PASS');
     const warnChecks = checks.filter((check) => check.status === 'WARN');
     const failChecks = checks.filter((check) => check.status === 'FAIL');
-    const status = response.lintStatus ?? response.status ?? 'UNKNOWN';
     const artifactPath = response.artifact?.current
       ? toRelativePath(response.repoRoot, response.artifact.current)
       : (response.artifact?.source?.path ?? 'Unknown');
     const score = calculateComplianceScore(checks);
-    const ruleSummary = countChecks(checks);
-    const checksByValidator = groupChecksByValidator(validators);
-    const resultLabel = labelForStatus(status);
-    const complianceLabel = score === null ? 'No evaluable' : `${score}/10`;
-    const complianceSummary = score === null ? 'No evaluable' : resultLabel;
-    const exceptionSection = renderExceptionSummary(failChecks, warnChecks);
-    const passSection = renderPassDetails(checksByValidator);
+    const decision = getDecision({ score, failCount: failChecks.length, warnCount: warnChecks.length, systemError: false });
+    const mergeAllowed = isMergeAllowedSummary({ failCount: failChecks.length, systemError: false });
+    const rulesEvaluated = checks.length;
+    const rulesPassed = passChecks.length;
 
     return `${[
       '# Reporte de Validación ArchiMate',
       '',
-      `## Cumplimiento: **${complianceLabel}** — ${complianceSummary}`,
-      '',
-      '| Indicador | Valor |',
-      '|---|---|',
-      `| **Archivo evaluado** | \`${escapeInlineCode(artifactPath)}\` |`,
-      `| **Resultado** | ${resultLabel} |`,
-      `| **Merge permitido** | ${isMergeAllowed(status) ? 'Sí' : 'No'} |`,
-      `| **Errores bloqueantes** | ${ruleSummary.FAIL ?? ruleSummary.fail ?? 0} |`,
-      `| **Advertencias** | ${ruleSummary.WARN ?? ruleSummary.warn ?? 0} |`,
-      `| **Reglas evaluadas** | ${checks.length} |`,
-      `| **Reglas cumplidas** | ${ruleSummary.PASS ?? ruleSummary.pass ?? 0} |`,
-      `| **DSLs ejecutados** | ${validators.length} |`,
-      '',
-      ...exceptionSection,
-      ...passSection,
+      ...renderCompliancePanelFinal({
+        artifactPath,
+        score,
+        decision,
+        mergeAllowed,
+        failCount: failChecks.length,
+        warnCount: warnChecks.length,
+        rulesEvaluated,
+        rulesPassed,
+      }),
+      ...renderWarningPanelFinal(warnChecks),
+      ...renderCautionPanelFinal(failChecks),
+      ...renderTipPanelFinal(validators, passChecks),
     ].join('\n').trimEnd()}\n`;
   },
 };
@@ -175,6 +170,127 @@ function flattenChecks(validators) {
     validatorId: validator.id,
     validatorTitle: validator.title,
   })));
+}
+
+function getDecision({ failCount, warnCount, systemError }) {
+  if (systemError) return 'No evaluable';
+  if (failCount > 0) return 'No cumple';
+  if (warnCount > 0) return 'Cumple con advertencias';
+  return 'Cumple';
+}
+
+function isMergeAllowedSummary({ failCount, systemError }) {
+  return !systemError && failCount === 0;
+}
+
+function renderCompliancePanelFinal({ artifactPath, score, decision, mergeAllowed, failCount, warnCount, rulesEvaluated, rulesPassed }) {
+  return [
+    `> ## Cumplimiento: **${score === null ? 'No evaluable' : `${score}/10`}** — ${decision}`,
+    '>',
+    '> | Indicador | Valor |',
+    '> |---|---|',
+    `> | **Archivo evaluado** | \`${escapeInlineCode(artifactPath)}\` |`,
+    `> | **Resultado** | ${decision} |`,
+    `> | **Merge permitido** | ${mergeAllowed ? 'Sí' : 'No'} |`,
+    `> | **Errores bloqueantes** | ${failCount} |`,
+    `> | **Advertencias** | ${warnCount} |`,
+    `> | **Reglas evaluadas** | ${rulesEvaluated} |`,
+    `> | **Reglas cumplidas** | ${rulesPassed} |`,
+    '',
+  ];
+}
+
+function renderWarningPanelFinal(warnChecks) {
+  if (warnChecks.length === 0) {
+    return [];
+  }
+
+  const lines = [
+    '> [!WARNING]',
+    `> **${warnChecks.length} ${pluralize(warnChecks.length, 'observación', 'observaciones')} ${warnChecks.length === 1 ? 'requiere' : 'requieren'} revisión**`,
+    '>',
+  ];
+
+  warnChecks.forEach((check, index) => {
+    lines.push(...renderIssuePanelEntryFinal(check, 'Elemento', 'Problema', 'Recomendación'));
+    if (index < warnChecks.length - 1) {
+      lines.push('>');
+    }
+  });
+
+  lines.push('');
+  return lines;
+}
+
+function renderCautionPanelFinal(failChecks) {
+  if (failChecks.length === 0) {
+    return [];
+  }
+
+  const lines = [
+    '> [!CAUTION]',
+    `> **${failChecks.length} ${pluralize(failChecks.length, 'regla bloqueante incumplida', 'reglas bloqueantes incumplidas')}**`,
+    '>',
+  ];
+
+  failChecks.forEach((check, index) => {
+    lines.push(...renderIssuePanelEntryFinal(check, 'Elemento', 'Problema', 'Recomendación'));
+    if (index < failChecks.length - 1) {
+      lines.push('>');
+    }
+  });
+
+  lines.push('');
+  return lines;
+}
+
+function renderTipPanelFinal(validators, passChecks) {
+  if (passChecks.length === 0) {
+    return [];
+  }
+
+  const lines = [
+    '> [!TIP]',
+    `> **${passChecks.length} ${pluralize(passChecks.length, 'regla cumplida', 'reglas cumplidas')}**`,
+    '>',
+    '> <details>',
+    '> <summary>Ver reglas cumplidas</summary>',
+    '>',
+  ];
+
+  for (const validator of validators) {
+    const validatorPasses = (validator.checks ?? []).filter((check) => check.status === 'PASS');
+    if (validatorPasses.length === 0) {
+      continue;
+    }
+
+    lines.push(`> ### ${validator.title ?? validator.id ?? 'Reglas'}`);
+    lines.push('>');
+
+    for (const check of validatorPasses) {
+      lines.push(`> - \`${escapeInlineCode(check.id)}\` — ${formatPassDescription(check.description ?? check.detail ?? 'Cumple.')}`);
+    }
+
+    lines.push('>');
+  }
+
+  lines.push('> </details>', '');
+  return lines;
+}
+
+function renderIssuePanelEntryFinal(check, elementLabel, problemLabel, recommendationLabel) {
+  const lines = [`> **Regla:** \`${escapeInlineCode(check.id)}\``];
+  lines.push(`> **Ubicación:** \`${escapeInlineCode(check.group ?? 'General')}\``);
+
+  const element = getMeaningfulDetail(check.detail);
+  if (element) {
+    lines.push(`> **${elementLabel}:** \`${escapeInlineCode(element)}\``);
+  }
+
+  lines.push(`> **${problemLabel}:** ${normalizeInlineText(check.message ?? 'Revisar el hallazgo reportado.')}`);
+  lines.push(`> **${recommendationLabel}:** ${normalizeInlineText(suggestAction(check))}`);
+
+  return lines;
 }
 
 function groupChecksByValidator(validators) {
@@ -389,6 +505,9 @@ function renderSystemErrorSummary(response) {
     '',
     '## Estado del sistema',
     '',
+    '> [!CAUTION]',
+    '> **ERROR — No se pudo completar la validación**',
+    '>',
     '> El motor no pudo completar la validación.',
     `> **Detalle:** ${normalizeInlineText(response.error ?? 'Error desconocido.')}`,
     '> **Acción:** Revisar el manifiesto, el artefacto de entrada y la configuración del workflow.',
@@ -482,6 +601,29 @@ function getMeaningfulDetail(value) {
 
 function stripTrailingPeriod(value) {
   return String(value ?? '').replace(/\.+$/, '');
+}
+
+function formatPassDescription(value) {
+  const text = stripTrailingPeriod(value)
+    .replace(/^Verifica que\s+/i, '')
+    .replace(/^Valida que\s+/i, '')
+    .replace(/\bpueda\b/gi, 'puede')
+    .replace(/\bcorresponda\b/gi, 'corresponde')
+    .replace(/\besté\b/gi, 'está')
+    .replace(/\bexistan\b/gi, 'Existen')
+    .replace(/\bexista\b/gi, 'existe')
+    .replace(/\bcontenga\b/gi, 'contiene')
+    .replace(/\bapunten\b/gi, 'apuntan')
+    .replace(/\btenga\b/gi, 'tiene')
+    .replace(/\bsea\b/gi, 'es')
+    .replace(/\bsean\b/gi, 'son')
+    .replace(/\bcomiencen\b/gi, 'comienzan');
+
+  if (text.length === 0) {
+    return text;
+  }
+
+  return `${text[0].toUpperCase()}${text.slice(1)}`;
 }
 
 function toRelativePath(root, target) {
