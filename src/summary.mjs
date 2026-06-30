@@ -559,7 +559,7 @@ async function renderSummaryMarkdownV03(summary) {
   lines.push('## Dashboard');
   lines.push('');
 
-  const resultChart = await createQuickChartUrl(buildResultChartConfig(summary), { width: 290, height: 190 });
+  const resultChart = await createQuickChartUrl(buildResultChartConfig(summary), { width: 320, height: 240 });
   const coverageChart = await createQuickChartUrl(buildCoverageChartConfig(summary), { width: 290, height: 190 });
   const dimensionsChart = await createQuickChartUrl(summary.quickchartConfig, { width: 560, height: 400 });
 
@@ -1185,7 +1185,7 @@ function buildResultChartConfig(summary) {
       circumference: Math.PI,
       rotation: Math.PI,
       cutoutPercentage: 75,
-      layout: { padding: 40 },
+      layout: { padding: 18 },
       legend: {
         display: false,
       },
@@ -1193,7 +1193,7 @@ function buildResultChartConfig(summary) {
         title: {
           display: true,
           text: title,
-          font: { size: 15, weight: 'bold' },
+          font: { size: 12, weight: 'bold' },
         },
         datalabels: {
           color: '#000000',
@@ -1201,7 +1201,7 @@ function buildResultChartConfig(summary) {
           align: 'end',
           formatter: (val) => formatPercentValue(val),
           font: {
-            size: 18,
+            size: 12,
             weight: 'bold',
           },
         },
@@ -1210,14 +1210,14 @@ function buildResultChartConfig(summary) {
             {
               text: 'You are at',
               font: {
-                size: 16,
+                size: 12,
               },
             },
             {
               text: hasScore ? formatPercentValue(completionPercent) : 'n/a',
               color: '#000000',
               font: {
-                size: 34,
+                size: 26,
                 weight: 'bold',
               },
             },
