@@ -414,7 +414,7 @@ function getRuleActionMessage(rule, catalogIndexes) {
 
 function getViewsRuleSummary(rule, catalogIndexes) {
   const finding = (rule?.findings ?? [])[0] ?? null;
-  const viewName = getFindingLabel(finding, catalogIndexes) || 'Vista';
+  const viewName = getFindingDisplayName(finding, catalogIndexes, 'Vista');
   const value = Number(finding?.value);
   const formattedValue = Number.isFinite(value) ? String(value) : 'n/a';
 
@@ -472,8 +472,8 @@ function renderRuleAlert(rule, catalogIndexes) {
   } else {
     for (const finding of findings) {
       if (isViewRule) {
-        const label = getFindingLabel(finding, catalogIndexes);
-        const message = normalizeInlineText(getViewsRuleAction(rule, label || 'Vista'));
+        const label = getFindingDisplayName(finding, catalogIndexes, 'Vista');
+        const message = normalizeInlineText(getViewsRuleAction(rule, label));
         lines.push(`> - ${message}`);
         continue;
       }
@@ -493,29 +493,50 @@ function getFindingLabel(finding, catalogIndexes) {
     return '';
   }
 
-  if (finding.collection === 'views') {
-    const recordName = String(finding.recordName ?? '').trim();
-    if (recordName) {
-      return recordName;
-    }
+  return getFindingDisplayName(finding, catalogIndexes, '');
+}
 
-    const recordId = String(finding.recordId ?? '').trim();
-    return recordId ? truncateInline(recordId, 24) : 'Vista';
+function getFindingDisplayName(finding, catalogIndexes, fallbackLabel = 'Vista') {
+  if (!finding) {
+    return fallbackLabel;
   }
 
-  if (finding.collection === 'relationships') {
-    return catalogIndexes?.relationships?.get(finding.recordId)?.name ?? 'Relación';
+  const recordName = String(finding.recordName ?? '').trim();
+  if (recordName) {
+    return `\`${escapeInlineCode(recordName)}\``;
   }
 
-  if (finding.collection === 'folders') {
-    return catalogIndexes?.folders?.get(finding.recordId)?.name ?? 'Carpeta';
+  const lookupName = getCatalogRecordName(finding, catalogIndexes);
+  if (lookupName) {
+    return `\`${escapeInlineCode(lookupName)}\``;
   }
 
-  if (finding.collection === 'elements') {
-    return catalogIndexes?.elements?.get(finding.recordId)?.name ?? 'Elemento';
+  const recordId = String(finding.recordId ?? '').trim();
+  if (recordId) {
+    return `\`${escapeInlineCode(truncateInline(recordId, 24))}\``;
   }
 
-  return '';
+  return fallbackLabel;
+}
+
+function getCatalogRecordName(finding, catalogIndexes) {
+  const recordId = String(finding?.recordId ?? '').trim();
+  if (!recordId) {
+    return '';
+  }
+
+  switch (String(finding?.collection ?? '')) {
+    case 'views':
+      return catalogIndexes?.views?.get(recordId)?.name ?? '';
+    case 'relationships':
+      return catalogIndexes?.relationships?.get(recordId)?.name ?? '';
+    case 'folders':
+      return catalogIndexes?.folders?.get(recordId)?.name ?? '';
+    case 'elements':
+      return catalogIndexes?.elements?.get(recordId)?.name ?? '';
+    default:
+      return '';
+  }
 }
 
 function renderSystemErrorPanel(message, details) {
