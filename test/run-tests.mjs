@@ -110,17 +110,14 @@ function assertSummaryShape(summaryMarkdownText) {
     throw new Error('Expected summary to include only Dashboard and Reporte de reglas sections.');
   }
 
+  const dashboardSection = summaryMarkdownText.split('## Dashboard')[1]?.split('## Reporte de reglas')[0] ?? '';
+  if (dashboardSection.includes('[!WARNING]') || dashboardSection.includes('[!CAUTION]') || dashboardSection.includes('[!TIP]') || dashboardSection.includes('[!NOTE]')) {
+    throw new Error('Expected dashboard to avoid admonitions.');
+  }
+
   const chartCount = (summaryMarkdownText.match(/quickchart\.io\/chart\/render/g) ?? []).length;
   if (chartCount !== 3) {
     throw new Error(`Expected exactly 3 dashboard charts, got ${chartCount}.`);
-  }
-
-  if (summaryMarkdownText.includes('[!WARNING]') || summaryMarkdownText.includes('[!CAUTION]') || summaryMarkdownText.includes('[!TIP]') || summaryMarkdownText.includes('[!NOTE]')) {
-    throw new Error('Expected summary to avoid admonitions entirely.');
-  }
-
-  if (summaryMarkdownText.includes('<details>') || summaryMarkdownText.includes('</details>')) {
-    throw new Error('Expected summary to avoid accordions entirely.');
   }
 
   for (const section of forbiddenSections) {

@@ -159,27 +159,75 @@ async function renderSummaryMarkdownV03(summary) {
   lines.push('## Dashboard');
   lines.push('');
 
-  const complianceChart = await createQuickChartUrl(buildComplianceChartConfig(summary.counts), { width: 260, height: 180 });
-  const rulesChart = await createQuickChartUrl(buildDistributionChartConfig(summary.counts), { width: 260, height: 180 });
+  const resultChart = await createQuickChartUrl(buildResultChartConfig(summary), { width: 260, height: 180 });
+  const coverageChart = await createQuickChartUrl(buildCoverageChartConfig(summary), { width: 260, height: 180 });
   const dimensionsChart = await createQuickChartUrl(summary.quickchartConfig, { width: 300, height: 180 });
 
-  lines.push('| Cumplimiento | Reglas | Dimensiones |');
+  lines.push('| Resultado | Cobertura | Dimensiones |');
   lines.push('| --- | --- | --- |');
-  lines.push(`| ![Cumplimiento](${complianceChart})<br><small>${summary.scoreLabel}</small> | ![Reglas](${rulesChart})<br><small>${summary.counts.pass} PASS · ${summary.counts.warning} WARNING · ${summary.counts.fail} FAIL · ${summary.counts.notimplemented} NOT IMPLEMENTED</small> | ![Dimensiones](${dimensionsChart})<br><small>${summary.partial ? `Evaluación parcial · ${summary.coverage} dimensiones evaluadas` : `Cobertura completa · ${summary.coverage} dimensiones evaluadas`}${summary.omittedDimensions.length > 0 ? `<br>Radar parcial: omite ${summary.omittedDimensions.join(', ')}` : ''}${summary.contractOk ? '<br>Contrato: OK' : '<br>Contrato: ERROR'}</small> |`);
+  lines.push(`| ![Resultado](${resultChart})<br><small>${summary.generalState} · ${summary.scoreLabel}<br>Contrato: ${summary.contractOk ? 'OK' : 'ERROR'}</small> | ![Cobertura](${coverageChart})<br><small>${summary.coverage} dimensiones evaluadas · ${summary.counts.notimplemented} no implementadas</small> | ![Dimensiones](${dimensionsChart})<br><small>${summary.partial ? `Radar parcial: omite ${summary.omittedDimensions.join(', ')}` : 'Radar completo'}${summary.omittedDimensions.length > 0 ? `<br>Dimensiones pendientes: ${summary.omittedDimensions.join(', ')}` : ''}</small> |`);
   lines.push('');
-  lines.push(`Evaluación ${summary.partial ? 'parcial' : 'completa'} · ${summary.coverage} dimensiones evaluadas · Contrato: ${summary.contractOk ? 'OK' : 'ERROR'}`);
+  lines.push(`Resultado ${summary.partial ? 'parcial' : 'completo'} · ${summary.coverage} dimensiones evaluadas · Contrato ${summary.contractOk ? 'OK' : 'ERROR'}`);
   lines.push('');
 
   lines.push('## Reporte de reglas');
   lines.push('');
 
-  lines.push('| Regla | Estado | Dimensión | Severidad | Score | Evaluadas | Pasadas | Falladas | Hallazgos | Mensaje |');
-  lines.push('| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |');
-  for (const rule of sortRulesForReport(summary.ruleResults)) {
-    lines.push(`| \`${escapeInlineCode(rule.ruleId)}\` | ${formatRuleState(rule.status)} | ${normalizeInlineText(rule.dimension ?? 'General')} | ${normalizeInlineText(rule.severity ?? 'n/a')} | ${formatDimensionScore(rule.score)} | ${formatDimensionScore(rule.evaluated)} | ${formatDimensionScore(rule.passed)} | ${formatDimensionScore(rule.failed)} | ${formatDimensionScore(rule.findings?.length ?? 0)} | ${normalizeInlineText(getRuleMessage(rule))}${formatRuleFindingsInline(rule)} |`);
+  const groupedRules = groupRulesByStatus(summary.ruleResults);
+  for (const status of ['fail', 'warning', 'notimplemented', 'pass']) {
+    const rules = groupedRules.get(status) ?? [];
+    lines.push(`### ${formatRuleGroupHeading(status)}`);
+    lines.push('');
+    lines.push(...buildRuleGroupNarrative(status, rules));
+    lines.push('');
+    lines.push(...buildRuleGroupAlert(status, rules.length));
+    lines.push('');
+
+    lines.push('| Regla | Dimensión | Severidad | Score | Evaluadas | Pasadas | Falladas | Hallazgos | Mensaje |');
+    lines.push('| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |');
+    if (rules.length === 0) {
+      lines.push('| _Sin reglas_ | _Sin reglas_ | _Sin reglas_ | _Sin reglas_ | _Sin reglas_ | _Sin reglas_ | _Sin reglas_ | _Sin reglas_ | _Sin reglas_ |');
+      lines.push('');
+      continue;
+    }
+
+    for (const rule of rules) {
+      lines.push(`| \`${escapeInlineCode(rule.ruleId)}\` | ${normalizeInlineText(rule.dimension ?? 'General')} | ${normalizeInlineText(rule.severity ?? 'n/a')} | ${formatDimensionScore(rule.score)} | ${formatDimensionScore(rule.evaluated)} | ${formatDimensionScore(rule.passed)} | ${formatDimensionScore(rule.failed)} | ${formatDimensionScore(rule.findings?.length ?? 0)} | ${normalizeInlineText(getRuleMessage(rule))}${formatRuleFindingsInline(rule)} |`);
+    }
+
+    for (const rule of rules) {
+      if ((rule.findings ?? []).length === 0) {
+        continue;
+      }
+
+      lines.push('<details>');
+      lines.push(`<summary>Ver hallazgos de ${escapeInlineCode(rule.ruleId)}</summary>`);
+      lines.push('');
+      lines.push('| ID | Campo | Valor | Mensaje |');
+      lines.push('| --- | --- | --- | --- |');
+      for (const finding of rule.findings) {
+        lines.push(`| \`${truncateInline(finding.recordId ?? 'n/a', 12)}\` | ${normalizeInlineText(finding.field ?? 'n/a')} | ${normalizeInlineText(truncateInline(formatFindingValue(finding.value), 80))} | ${normalizeInlineText(finding.message ?? 'n/a')} |`);
+      }
+      lines.push('');
+      lines.push('</details>');
+      lines.push('');
+    }
+
   }
 
   return lines.join('\n').trimEnd();
+}
+
+function groupRulesByStatus(rules) {
+  return rules.reduce((groups, rule) => {
+    const status = String(rule.status ?? 'unknown').toLowerCase();
+    if (!groups.has(status)) {
+      groups.set(status, []);
+    }
+
+    groups.get(status).push(rule);
+    return groups;
+  }, new Map());
 }
 
 function sortRulesForReport(rules) {
@@ -208,6 +256,50 @@ function formatRuleState(status) {
   if (value === 'notimplemented') return 'NOT IMPLEMENTED';
   if (value === 'pass') return 'PASS';
   return value || 'n/a';
+}
+
+function formatRuleGroupHeading(status) {
+  const value = String(status ?? '').toLowerCase();
+  if (value === 'fail') return 'ERROR';
+  if (value === 'warning') return 'WARNING';
+  if (value === 'notimplemented') return 'CAUTION';
+  if (value === 'pass') return 'TIP';
+  return value.toUpperCase();
+}
+
+function buildRuleGroupNarrative(status, rules) {
+  const value = String(status ?? '').toLowerCase();
+  if (value === 'fail') {
+    return [`Estas reglas bloquean el avance y deben corregirse primero. (${rules.length})`];
+  }
+  if (value === 'warning') {
+    return [`Estas reglas requieren revisión antes de considerar el artefacto como estable. (${rules.length})`];
+  }
+  if (value === 'notimplemented') {
+    return ['Reglas declaradas, pero el motor aún no soporta su scope u operador.'];
+  }
+  if (value === 'pass') {
+    return ['Reglas validadas correctamente.'];
+  }
+  return ['Reglas agrupadas por estado.'];
+}
+
+function buildRuleGroupAlert(status, count) {
+  const value = String(status ?? '').toLowerCase();
+  if (value === 'fail') {
+    return ['> [!CAUTION]', `> **${count} ${count === 1 ? 'regla fallida' : 'reglas fallidas'}**`];
+  }
+  if (value === 'warning') {
+    return ['> [!WARNING]', `> **${count} ${count === 1 ? 'regla con advertencia' : 'reglas con advertencia'}**`];
+  }
+  if (value === 'notimplemented') {
+    return ['> [!CAUTION]', `> **${count} ${count === 1 ? 'regla no implementada' : 'reglas no implementadas'}**`];
+  }
+  if (value === 'pass') {
+    return ['> [!TIP]', `> **${count} ${count === 1 ? 'regla cumplida' : 'reglas cumplidas'}**`];
+  }
+
+  return ['> [!NOTE]', `> **${count} reglas**`];
 }
 
 function formatDimensionScore(value) {
@@ -256,7 +348,7 @@ function getRuleMessage(rule) {
   }
 
   if (String(rule.status ?? '').toLowerCase() === 'notimplemented') {
-    return 'Regla declarada pero aún no soportada por el motor.';
+    return 'Regla declarada, pero el motor aún no soporta su scope u operador.';
   }
 
   return rule.reason ?? rule.message ?? 'n/a';
@@ -694,60 +786,21 @@ async function renderDashboardSectionFinal({ validators, complianceText, passCou
   }
 }
 
-function buildComplianceChartConfig(input = {}) {
-  const counts = normalizeRuleCounts({
-    passCount: input.passCount ?? input.pass,
-    warnCount: input.warnCount ?? input.warning,
-    failCount: input.failCount ?? input.fail,
-    totalRules: input.totalRules,
-    notimplemented: input.notimplemented,
-  });
+function buildResultChartConfig(summary) {
+  const score = Number(summary?.qualityScore?.overallScore);
+  const hasScore = Number.isFinite(score);
+  const safeScore = hasScore ? Math.max(0, Math.min(100, score)) : 0;
+  const remaining = hasScore ? Math.max(0, 100 - safeScore) : 100;
 
   return {
     type: 'doughnut',
     data: {
-      labels: ['PASS', 'WARNING', 'FAIL', 'NOT IMPLEMENTED'],
+      labels: ['Score', 'Pendiente'],
       datasets: [
         {
-          data: [counts.pass, counts.warning, counts.fail, counts.notimplemented],
-          backgroundColor: ['#22c55e', '#f59e0b', '#ef4444', '#9ca3af'],
+          data: [safeScore, remaining],
+          backgroundColor: ['#22c55e', '#e5e7eb'],
           borderWidth: 0,
-        },
-      ],
-    },
-    options: {
-      layout: { padding: 4 },
-      plugins: {
-        legend: { display: true, position: 'bottom' },
-        title: {
-          display: true,
-          text: 'Cumplimiento',
-          font: { size: 13 },
-        },
-      },
-      cutout: '70%',
-    },
-  };
-}
-
-function buildDistributionChartConfig(input = {}) {
-  const counts = normalizeRuleCounts({
-    passCount: input.passCount ?? input.pass,
-    warnCount: input.warnCount ?? input.warning,
-    failCount: input.failCount ?? input.fail,
-    totalRules: input.totalRules,
-    notimplemented: input.notimplemented,
-  });
-
-  return {
-    type: 'bar',
-    data: {
-      labels: ['PASS', 'WARNING', 'FAIL', 'NOT IMPLEMENTED'],
-      datasets: [
-        {
-          label: 'Reglas',
-          data: [counts.pass, counts.warning, counts.fail, counts.notimplemented],
-          backgroundColor: ['#22c55e', '#f59e0b', '#ef4444', '#9ca3af'],
         },
       ],
     },
@@ -757,34 +810,44 @@ function buildDistributionChartConfig(input = {}) {
         legend: { display: false },
         title: {
           display: true,
-          text: 'Reglas',
+          text: 'Resultado',
           font: { size: 13 },
         },
       },
-      scales: {
-        y: {
-          beginAtZero: true,
-          ticks: { precision: 0, font: { size: 10 } },
-        },
-        x: { ticks: { font: { size: 10 } } },
-      },
+      cutout: '70%',
     },
   };
 }
 
-function normalizeRuleCounts({ passCount = 0, warnCount = 0, failCount = 0, totalRules = 0, notimplemented } = {}) {
-  const pass = Math.max(0, Number(passCount) || 0);
-  const warning = Math.max(0, Number(warnCount) || 0);
-  const fail = Math.max(0, Number(failCount) || 0);
-  const notimplementedCount = Number.isFinite(Number(notimplemented))
-    ? Math.max(0, Number(notimplemented) || 0)
-    : Math.max(0, Number(totalRules) || 0) - pass - warning - fail;
+function buildCoverageChartConfig(summary) {
+  const evaluated = Number(summary?.coverage?.split('/')[0]) || 0;
+  const total = Number(summary?.coverage?.split('/')[1]) || 0;
+  const notImplemented = Math.max(0, total - evaluated);
 
   return {
-    pass,
-    warning,
-    fail,
-    notimplemented: Math.max(0, notimplementedCount),
+    type: 'doughnut',
+    data: {
+      labels: ['Evaluadas', 'No implementadas'],
+      datasets: [
+        {
+          data: [evaluated, notImplemented],
+          backgroundColor: ['#3b82f6', '#9ca3af'],
+          borderWidth: 0,
+        },
+      ],
+    },
+    options: {
+      layout: { padding: 4 },
+      plugins: {
+        legend: { display: false },
+        title: {
+          display: true,
+          text: 'Cobertura',
+          font: { size: 13 },
+        },
+      },
+      cutout: '70%',
+    },
   };
 }
 
