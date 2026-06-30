@@ -4,42 +4,370 @@ import { fileURLToPath } from 'node:url';
 import { loadYamlFile } from './infra/yaml.mjs';
 
 export async function renderDesignSummary(response) {
-  validateDesignContracts();
-
   if (response.systemStatus === 'ERROR') {
     return `${renderSystemErrorSummary(response).join('\n').trimEnd()}\n`;
   }
 
-  const validators = response.validators ?? [];
-  const checks = flattenChecks(validators);
-  const passChecks = checks.filter((check) => check.status === 'PASS');
-  const warnChecks = checks.filter((check) => check.status === 'WARN');
-  const failChecks = checks.filter((check) => check.status === 'FAIL');
-  const rulesEvaluated = checks.length;
-  const dslCount = validators.length;
-  const statusCounts = countChecks(checks);
-  const totalRules = statusCounts.PASS + statusCounts.WARN + statusCounts.FAIL;
-  const complianceText = formatRatio(statusCounts.PASS, totalRules);
-  const dashboard = await renderDashboardSectionFinal({
-    validators,
-    complianceText,
-    passCount: statusCounts.PASS,
-    warnCount: statusCounts.WARN,
-    failCount: statusCounts.FAIL,
-    totalRules,
-    rulesEvaluated,
-    dslCount,
-    resultLabel: getResultLabel({ failCount: failChecks.length, warnCount: warnChecks.length, systemError: false, incomplete: String(response.status ?? '').toUpperCase() === 'INCOMPLETE' }),
-  });
+  const summary = buildSummaryModelFromReports(response.reports ?? {}, response.status);
+  return `${await renderSummaryMarkdownV03(summary)}\n`;
+}
 
-  return `${[
-    ...dashboard.lines,
-    ...renderWarningPanelFinal(warnChecks),
-    ...renderCautionPanelFinal(failChecks),
-    ...renderTipPanelFinal(validators, passChecks),
-    ...renderIncompletePanel(String(response.status ?? '').toUpperCase() === 'INCOMPLETE'),
-    ...dashboard.systemIssueLines,
-  ].join('\n').trimEnd()}\n`;
+function buildSummaryModelFromReports(reports, reportStatus) {
+  const qualityScore = reports?.qualityScore ?? {};
+  const quickchart = reports?.quickchart ?? {};
+  const ruleResults = Array.isArray(reports?.ruleResults)
+    ? reports.ruleResults
+    : Array.isArray(reports?.rules)
+      ? reports.rules
+      : [];
+
+  const ruleMap = new Map(ruleResults.map((rule) => [rule.ruleId, rule]));
+  const businessRules = ruleResults.filter((rule) => rule.ruleId !== 'contract_consistency_check');
+  const contractRule = ruleMap.get('contract_consistency_check') ?? null;
+  const dimensions = Array.isArray(qualityScore.dimensions) ? qualityScore.dimensions : [];
+  const evaluatedDimensions = dimensions.filter((dimension) => Number.isFinite(dimension.score));
+  const omittedDimensions = dimensions.filter((dimension) => !Number.isFinite(dimension.score)).map((dimension) => dimension.label);
+  const counts = countRuleStatuses(businessRules);
+  const partial = Boolean(qualityScore.partial) || omittedDimensions.length > 0;
+  const qualityStatus = mapQualityStatus(qualityScore.status, partial);
+  const coverage = `${evaluatedDimensions.length}/${dimensions.length}`;
+  const quickchartIssues = compareQuickchartToQualityScore(quickchart, qualityScore);
+  const contractIssues = buildContractIssues(contractRule, quickchartIssues);
+  const contractOk = contractIssues.length === 0;
+  const generalState = partial ? 'Evaluación parcial' : (contractOk ? qualityStatus : 'Contrato inconsistente');
+  const scoreLabel = qualityScore.overallScore === null || qualityScore.overallScore === undefined
+    ? 'n/a'
+    : `${qualityScore.overallScore}/100${partial ? ' (parcial)' : ''}`;
+
+  return {
+    qualityScore,
+    quickchart,
+    ruleResults: businessRules,
+    contractRule,
+    counts,
+    partial,
+    qualityStatus,
+    coverage,
+    contractOk,
+    contractIssues,
+    generalState,
+    scoreLabel,
+    omittedDimensions,
+    radarTrusted: contractOk,
+    quickchartConfig: contractOk && quickchart?.type && quickchart?.data && quickchart?.options
+      ? {
+        type: quickchart.type,
+        data: quickchart.data,
+        options: quickchart.options,
+      }
+      : null,
+  };
+}
+
+function countRuleStatuses(ruleResults) {
+  return ruleResults.reduce((acc, rule) => {
+    const key = String(rule.status ?? 'unknown').toLowerCase();
+    if (!Object.prototype.hasOwnProperty.call(acc, key)) {
+      acc[key] = 0;
+    }
+    acc[key] += 1;
+    return acc;
+  }, { pass: 0, warning: 0, fail: 0, notimplemented: 0 });
+}
+
+function mapQualityStatus(status, partial) {
+  if (partial) {
+    return 'Evaluación parcial';
+  }
+
+  const value = String(status ?? '').toLowerCase();
+  if (value === 'pass') return 'Cumple';
+  if (value === 'warning') return 'Cumple con advertencias';
+  if (value === 'fail') return 'No cumple';
+  return 'No evaluado';
+}
+
+function compareQuickchartToQualityScore(quickchart, qualityScore) {
+  const included = (qualityScore?.dimensions ?? []).filter((dimension) => Number.isFinite(dimension.score));
+  const radarLabels = quickchart?.data?.labels ?? [];
+  const expectedLabels = included.map((dimension) => dimension.label);
+  const evaluatedSeries = quickchart?.data?.datasets?.[0]?.data ?? [];
+  const targetSeries = quickchart?.data?.datasets?.[1]?.data ?? [];
+  const expectedScores = included.map((dimension) => dimension.score);
+  const expectedTargets = included.map((dimension) => dimension.target);
+  const issues = [];
+
+  if (!arraysEqual(radarLabels, expectedLabels)) {
+    issues.push('quickchart-radar.json no coincide con quality-score.json en el orden de dimensiones.');
+  }
+
+  if (!arraysEqual(evaluatedSeries, expectedScores)) {
+    issues.push('quickchart-radar.json no coincide con quality-score.json en el dataset Evaluado.');
+  }
+
+  if (!arraysEqual(targetSeries, expectedTargets)) {
+    issues.push('quickchart-radar.json no coincide con quality-score.json en el dataset Objetivo.');
+  }
+
+  if (Boolean(quickchart?.partial) !== Boolean(qualityScore?.partial)) {
+    issues.push('quickchart-radar.json no coincide con el indicador partial.');
+  }
+
+  const omittedDimensions = (qualityScore?.dimensions ?? [])
+    .filter((dimension) => !Number.isFinite(dimension.score))
+    .map((dimension) => dimension.label);
+
+  if (!arraysEqual(quickchart?.omittedDimensions ?? [], omittedDimensions)) {
+    issues.push('quickchart-radar.json no coincide con las dimensiones omitidas.');
+  }
+
+  return issues;
+}
+
+function buildContractIssues(contractRule, quickchartIssues) {
+  const issues = [...quickchartIssues];
+
+  if (!contractRule) {
+    issues.push('Falta el resultado interno contract_consistency_check en rule-results.json.');
+    return issues;
+  }
+
+  for (const finding of contractRule.findings ?? []) {
+    if (finding?.message) {
+      issues.push(finding.message);
+    }
+  }
+
+  if (contractRule.includeInQualityScore !== false) {
+    issues.push('contract_consistency_check debe tener includeInQualityScore: false.');
+  }
+
+  if (contractRule.includeInRadar !== false) {
+    issues.push('contract_consistency_check debe tener includeInRadar: false.');
+  }
+
+  if (String(contractRule.status ?? '') !== 'pass') {
+    issues.push('contract_consistency_check falló.');
+  }
+
+  return issues;
+}
+
+async function renderSummaryMarkdownV03(summary) {
+  const lines = ['# Calidad del diseño', ''];
+
+  if (summary.contractIssues.length > 0) {
+    lines.push('> [!CAUTION]');
+    lines.push('> **ERROR DE CONTRATO**');
+    lines.push('>');
+    lines.push('> El radar y el score no se consideran confiables hasta corregir la inconsistencia.');
+    lines.push('');
+  }
+
+  if (summary.partial) {
+    lines.push('> [!CAUTION]');
+    lines.push('> **EVALUACIÓN PARCIAL**');
+    lines.push('>');
+    lines.push(`> Cobertura actual: ${summary.coverage} dimensiones evaluadas.`);
+    if (summary.omittedDimensions.length > 0) {
+      lines.push(`> Dimensiones omitidas: ${summary.omittedDimensions.join(', ')}.`);
+    }
+    lines.push('');
+  }
+
+  lines.push('## Resumen');
+  lines.push('');
+  lines.push('| Estado general | Score | Cobertura | PASS | WARNING | FAIL | NOT IMPLEMENTED | Contrato |');
+  lines.push('| --- | --- | --- | ---: | ---: | ---: | ---: | --- |');
+  lines.push(`| ${summary.generalState} | ${summary.scoreLabel} | ${summary.coverage} | ${summary.counts.pass} | ${summary.counts.warning} | ${summary.counts.fail} | ${summary.counts.notimplemented} | ${summary.contractOk ? 'OK' : 'ERROR'} |`);
+  lines.push('');
+
+  lines.push('## Radar');
+  lines.push('');
+  if (summary.radarTrusted && summary.quickchartConfig) {
+    try {
+      const radarUrl = await createQuickChartUrl(summary.quickchartConfig, { width: 520, height: 360 });
+      if (summary.partial) {
+        lines.push('> [!WARNING]');
+        lines.push(`> Radar parcial: omite ${summary.omittedDimensions.join(', ')}.`);
+        lines.push('');
+      }
+      lines.push(`<img src="${radarUrl}" alt="Radar de calidad" width="520" height="360">`);
+      lines.push('');
+      lines.push('<small>Fuente: `reports/quickchart-radar.json`</small>');
+    } catch (error) {
+      lines.push('> [!CAUTION]');
+      lines.push('> No se pudo generar el radar desde `reports/quickchart-radar.json`.');
+      lines.push(`> **Detalle:** ${normalizeInlineText(error?.message ?? 'QuickChart no respondió.')}`);
+    }
+  } else {
+    lines.push('> [!CAUTION]');
+    lines.push('> El radar no es confiable porque el contrato es inconsistente.');
+    if (summary.contractIssues.length > 0) {
+      lines.push('>');
+      for (const issue of summary.contractIssues) {
+        lines.push(`> - ${normalizeInlineText(issue)}`);
+      }
+    }
+  }
+
+  lines.push('');
+  lines.push('## Dimensiones');
+  lines.push('');
+  lines.push('| Dimensión | Score | Target | Estado | Reglas evaluadas |');
+  lines.push('| --- | ---: | ---: | --- | ---: |');
+  for (const dimension of summary.qualityScore.dimensions ?? []) {
+    lines.push(`| ${dimension.label} | ${formatDimensionScore(dimension.score)} | ${formatDimensionScore(dimension.target)} | ${formatDimensionState(dimension.status)} | ${formatDimensionScore(dimension.includedRules)} |`);
+  }
+  lines.push('');
+
+  lines.push('## Observaciones');
+  lines.push('');
+  const warningsByDimension = groupRulesByDimension(summary.ruleResults.filter((rule) => String(rule.status ?? '').toLowerCase() === 'warning'));
+
+  if (warningsByDimension.size === 0) {
+    lines.push('> [!TIP]');
+    lines.push('> No hay observaciones WARNING.');
+    lines.push('');
+  } else {
+    for (const [dimension, rules] of warningsByDimension) {
+      lines.push(`<details>`);
+      lines.push(`<summary>${dimension} (${rules.length})</summary>`);
+      lines.push('');
+      lines.push('| Regla | Severidad | Score | Evaluadas | Pasadas | Falladas | Hallazgos | Mensaje |');
+      lines.push('| --- | --- | ---: | ---: | ---: | ---: | ---: | --- |');
+      for (const rule of rules) {
+        lines.push(`| \`${escapeInlineCode(rule.ruleId)}\` | ${normalizeInlineText(rule.severity)} | ${formatDimensionScore(rule.score)} | ${formatDimensionScore(rule.evaluated)} | ${formatDimensionScore(rule.passed)} | ${formatDimensionScore(rule.failed)} | ${formatDimensionScore(rule.findings?.length ?? 0)} | ${normalizeInlineText(getFailureMessage(rule))} |`);
+      }
+      lines.push('');
+
+      for (const rule of rules) {
+        if ((rule.findings ?? []).length === 0) {
+          continue;
+        }
+
+        lines.push(`<details>`);
+        lines.push(`<summary>${rule.ruleId} (${rule.findings.length} hallazgos)</summary>`);
+        lines.push('');
+        lines.push('| recordId | field | value | message |');
+        lines.push('| --- | --- | --- | --- |');
+        for (const finding of rule.findings) {
+          lines.push(`| ${normalizeInlineText(finding.recordId ?? 'n/a')} | ${normalizeInlineText(finding.field ?? 'n/a')} | ${normalizeInlineText(formatFindingValue(finding.value))} | ${normalizeInlineText(finding.message ?? 'n/a')} |`);
+        }
+        lines.push('');
+        lines.push('</details>');
+        lines.push('');
+      }
+
+      lines.push('</details>');
+      lines.push('');
+    }
+  }
+
+  lines.push('## Reglas cumplidas');
+  lines.push('');
+  lines.push('<details>');
+  lines.push('<summary>Ver reglas cumplidas</summary>');
+  lines.push('');
+  const passByDimension = groupRulesByDimension(summary.ruleResults.filter((rule) => String(rule.status ?? '').toLowerCase() === 'pass'));
+  if (passByDimension.size === 0) {
+    lines.push('_Sin reglas cumplidas para mostrar._');
+  } else {
+    for (const [dimension, rules] of passByDimension) {
+      lines.push(`### ${dimension}`);
+      lines.push('');
+      for (const rule of rules) {
+        lines.push(`- \`${escapeInlineCode(rule.ruleId)}\` — ${normalizeInlineText(rule.message ?? rule.reason ?? 'Cumple.')}`);
+      }
+      lines.push('');
+    }
+  }
+  lines.push('</details>');
+  lines.push('');
+
+  lines.push('## Consistencia del contrato');
+  lines.push('');
+  if (summary.contractIssues.length === 0) {
+    lines.push('> [!TIP]');
+    lines.push('> **Contrato OK**');
+    lines.push('>');
+    lines.push('> `contract_consistency_check` confirma que quality-score.json y quickchart-radar.json son consistentes.');
+  } else {
+    lines.push('> [!CAUTION]');
+    lines.push('> **Contrato inconsistente**');
+    lines.push('>');
+    for (const issue of summary.contractIssues) {
+      lines.push(`> - ${normalizeInlineText(issue)}`);
+    }
+  }
+
+  lines.push('');
+  if (summary.contractRule) {
+    lines.push('| Regla | Estado | Score | Evaluadas | Pasadas | Falladas |');
+    lines.push('| --- | --- | ---: | ---: | ---: | ---: |');
+    lines.push(`| \`${escapeInlineCode(summary.contractRule.ruleId)}\` | ${normalizeInlineText(summary.contractRule.status)} | ${formatDimensionScore(summary.contractRule.score)} | ${formatDimensionScore(summary.contractRule.evaluated)} | ${formatDimensionScore(summary.contractRule.passed)} | ${formatDimensionScore(summary.contractRule.failed)} |`);
+  }
+
+  return lines.join('\n').trimEnd();
+}
+
+function groupRulesByDimension(rules) {
+  return rules.reduce((groups, rule) => {
+    const key = String(rule.dimension ?? 'General');
+    if (!groups.has(key)) {
+      groups.set(key, []);
+    }
+
+    groups.get(key).push(rule);
+    return groups;
+  }, new Map());
+}
+
+function formatDimensionScore(value) {
+  if (value === null || value === undefined) {
+    return 'n/a';
+  }
+
+  return String(value);
+}
+
+function formatDimensionState(status) {
+  const value = String(status ?? '').toLowerCase();
+  if (value === 'pass') return 'Aprobada';
+  if (value === 'warning') return 'Advertencia';
+  if (value === 'fail') return 'Bloqueante';
+  if (value === 'incomplete') return 'Parcial';
+  if (value === 'notimplemented') return 'No implementada';
+  return value || 'n/a';
+}
+
+function getFailureMessage(rule) {
+  const firstFinding = (rule.findings ?? [])[0];
+  if (firstFinding?.message) {
+    return firstFinding.message;
+  }
+
+  if (rule.reason) {
+    return rule.reason;
+  }
+
+  if (rule.message) {
+    return rule.message;
+  }
+
+  return 'n/a';
+}
+
+function formatFindingValue(value) {
+  if (value === null || value === undefined) {
+    return 'n/a';
+  }
+
+  if (typeof value === 'object') {
+    return JSON.stringify(value);
+  }
+
+  return String(value);
 }
 
 function countChecks(checks) {

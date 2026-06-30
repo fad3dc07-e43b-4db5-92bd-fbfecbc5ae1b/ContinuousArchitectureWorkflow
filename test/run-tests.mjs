@@ -21,8 +21,11 @@ renderMarkdown(markdownViewerPath, tempSummary, tempHtml);
 const qualityScore = readJson(path.join(repoRoot, 'reports', 'quality-score.json'));
 const quickchart = readJson(path.join(repoRoot, 'reports', 'quickchart-radar.json'));
 const catalog = readJson(path.join(repoRoot, 'reports', 'catalog.json'));
+const summaryMarkdown = fs.readFileSync(tempSummary, 'utf8');
 
-process.stdout.write(fs.readFileSync(tempSummary, 'utf8'));
+assertSummaryShape(summaryMarkdown);
+
+process.stdout.write(summaryMarkdown);
 
 if (qualityScore.status !== 'incomplete') {
   throw new Error(`Expected quality-score.json to be incomplete, got '${qualityScore.status}'.`);
@@ -88,4 +91,33 @@ function renderMarkdown(viewer, markdownPath, htmlPath) {
 
 function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+}
+
+function assertSummaryShape(summaryMarkdownText) {
+  const requiredLabels = ['Estructura', 'Nomenclatura', 'Integridad', 'Relaciones', 'Trazabilidad', 'Legibilidad'];
+  const legacyLabels = ['XML', 'Identidad', 'Estilo', 'Vistas'];
+
+  if (!summaryMarkdownText.includes('Evaluación parcial')) {
+    throw new Error('Expected summary to show Evaluación parcial.');
+  }
+
+  if (!summaryMarkdownText.includes('Cobertura actual: 4/6 dimensiones evaluadas.')) {
+    throw new Error('Expected summary to show coverage 4/6.');
+  }
+
+  if (!summaryMarkdownText.includes('Consistencia del contrato')) {
+    throw new Error('Expected summary to include a contract consistency section.');
+  }
+
+  for (const label of requiredLabels) {
+    if (!summaryMarkdownText.includes(label)) {
+      throw new Error(`Expected summary to include dimension '${label}'.`);
+    }
+  }
+
+  for (const label of legacyLabels) {
+    if (summaryMarkdownText.includes(label)) {
+      throw new Error(`Expected summary not to include legacy dimension '${label}'.`);
+    }
+  }
 }
