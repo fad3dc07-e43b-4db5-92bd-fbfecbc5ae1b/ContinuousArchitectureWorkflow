@@ -579,10 +579,6 @@ async function renderSummaryMarkdownV03(summary) {
   lines.push('');
   lines.push(`<img src="${coverageChart}" width="250" />`);
   lines.push('');
-  lines.push(`<strong>Cobertura ${summary.coverage} dimensiones</strong>`);
-  lines.push('');
-  lines.push(`<small>${summary.counts.notimplemented} pendientes</small>`);
-  lines.push('');
   lines.push('</td>');
   lines.push('</tr>');
   lines.push('</table>');
@@ -590,8 +586,6 @@ async function renderSummaryMarkdownV03(summary) {
   lines.push('<td width="58%" align="center" valign="middle">');
   lines.push('');
   lines.push(`<img src="${dimensionsChart}" width="420" />`);
-  lines.push('');
-  lines.push(`<strong>Dimensiones</strong><br/>${summary.partial ? `Radar parcial · omite ${summary.omittedDimensions.join(' y ')}` : 'Radar completo'}${summary.omittedDimensions.length > 0 ? `<br/>Dimensiones pendientes: ${summary.omittedDimensions.join(', ')}` : ''}`);
   lines.push('');
   lines.push('</td>');
   lines.push('</tr>');
