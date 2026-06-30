@@ -507,14 +507,8 @@ function renderConsolidatedStatusAlert(kind, statusLabel, sectionGroups, extraMe
   const lines = [];
   const count = sectionGroups.reduce((sum, group) => sum + group.rules.length, 0) + extraMessages.length;
   const alertKind = kind === 'warning' ? 'WARNING' : (kind === 'pass' ? 'TIP' : 'CAUTION');
-  const title = kind === 'warning'
-    ? `${statusLabel} · Reglas con advertencias`
-    : (kind === 'pass'
-      ? `${statusLabel} · Validaciones cumplidas`
-      : `${statusLabel} · Errores del engine`);
 
   lines.push(`> [!${alertKind}]`);
-  lines.push(`> **${title}**`);
   if (count > 0) {
     lines.push('>');
   }
