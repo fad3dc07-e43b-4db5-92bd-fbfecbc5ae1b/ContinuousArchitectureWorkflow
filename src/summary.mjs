@@ -398,6 +398,10 @@ function getRuleActionMessage(rule, catalogIndexes) {
       return 'Renombrar el elemento para que inicie con mayúscula.';
     }
 
+    if (String(rule?.ruleId ?? '') === 'nomenclatura_regla') {
+      return 'Ajustar el nombre para que sea más claro y consistente.';
+    }
+
     return 'Revisar la convención y ajustar el elemento.';
   }
 
@@ -440,7 +444,7 @@ function renderRuleAlert(rule, catalogIndexes) {
   const kind = getVisibleAlertKind(status);
   const lines = [
     `> [!${kind}]`,
-    `> **${status} · \`${escapeInlineCode(rule.ruleId)}\`**`,
+    `> **${status}**`,
     `> **Dimensión:** ${normalizeInlineText(rule.dimension ?? 'General')}`,
     '>',
     `> ${normalizeInlineText(getRuleSummaryMessage(rule, catalogIndexes))}`,

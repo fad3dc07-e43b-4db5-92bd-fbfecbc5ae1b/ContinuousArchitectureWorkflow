@@ -71,7 +71,7 @@ rules:
       passThreshold: 95
       warningThreshold: 80
       failBelow: 80
-    failureMessage: El nombre se entiende mejor cuando empieza con mayúscula y mantiene un estilo consistente.
+    failureMessage: El nombre se entiende mejor cuando es claro, consistente y empieza con mayúscula.
 
   vistas_vacias_regla:
     dimension: Legibilidad
