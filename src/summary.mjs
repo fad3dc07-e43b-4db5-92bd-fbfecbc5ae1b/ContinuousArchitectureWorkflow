@@ -504,19 +504,69 @@ function renderSystemErrorPanel(message, details) {
 
 function renderRulesBySection(summary) {
   const lines = [];
+  const sections = [...summary.treeSections, ...summary.auxSections];
+  const grouped = {
+    warning: collectSectionRulesByStatus(summary.sectionRules, sections, 'WARN'),
+    pass: collectSectionRulesByStatus(summary.sectionRules, sections, 'PASS'),
+    fail: collectSectionRulesByStatus(summary.sectionRules, sections, 'FAIL'),
+  };
 
-  for (const section of [...summary.treeSections, ...summary.auxSections]) {
-    const rules = summary.sectionRules.get(section) ?? [];
-    if (rules.length === 0) {
-      continue;
+  lines.push(...renderConsolidatedStatusAlert('warning', 'WARN', grouped.warning));
+  lines.push('');
+  lines.push(...renderConsolidatedStatusAlert('pass', 'PASS', grouped.pass));
+  lines.push('');
+  lines.push(...renderConsolidatedStatusAlert('fail', 'FAIL', grouped.fail, summary.contractIssues));
+
+  return lines;
+}
+
+function collectSectionRulesByStatus(sectionRules, sections, status) {
+  return sections
+    .map((section) => {
+      const rules = (sectionRules.get(section) ?? []).filter((rule) => getVisibleRuleStatus(rule) === status);
+      return rules.length > 0 ? { section, rules } : null;
+    })
+    .filter(Boolean);
+}
+
+function renderConsolidatedStatusAlert(kind, statusLabel, sectionGroups, extraMessages = []) {
+  const lines = [];
+  const count = sectionGroups.reduce((sum, group) => sum + group.rules.length, 0) + extraMessages.length;
+  const alertKind = kind === 'warning' ? 'WARNING' : (kind === 'pass' ? 'TIP' : 'CAUTION');
+  const title = kind === 'warning'
+    ? `${statusLabel} · Reglas con advertencias`
+    : (kind === 'pass'
+      ? `${statusLabel} · Validaciones cumplidas`
+      : `${statusLabel} · Errores del engine`);
+
+  lines.push(`> [!${alertKind}]`);
+  lines.push(`> **${title}**`);
+  if (count > 0) {
+    lines.push('>');
+  }
+
+  if (sectionGroups.length === 0 && extraMessages.length === 0) {
+    lines.push('> Sin reglas aplicadas.');
+    return lines;
+  }
+
+  for (const group of sectionGroups) {
+    lines.push(`> **${group.section}**`);
+    for (const rule of group.rules) {
+      const summary = normalizeInlineText(getRuleSummaryMessage(rule));
+      const action = normalizeInlineText(getRuleActionMessage(rule));
+      lines.push(`> - \`${escapeInlineCode(rule.ruleId)}\` · ${summary}`);
+      if (kind !== 'pass') {
+        lines.push(`>   - **Acción:** ${action}`);
+      }
     }
+    lines.push('>');
+  }
 
-    lines.push(`### ${section}`);
-    lines.push('');
-
-    for (const rule of rules) {
-      lines.push(...renderRuleAlert(rule, summary.catalogIndexes));
-      lines.push('');
+  if (extraMessages.length > 0) {
+    lines.push('> **Errores del engine**');
+    for (const message of extraMessages) {
+      lines.push(`> - ${normalizeInlineText(message)}`);
     }
   }
 
